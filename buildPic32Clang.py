@@ -51,25 +51,31 @@
 # code).
 #
 
+import subprocess
+import os
+import time
+import shutil
+from pathlib import PurePosixPath, Path
+
+
 PIC32_CLANG_VERSION = '0.01'
 
-ROOT_WORKING_DIR = './pic32clang/'
+# Note that '/' is an operator for stuff in pathlib that joins path segments.
+ROOT_WORKING_DIR = PurePosixPath('.', 'pic32clang')
+BUILD_PREFIX = ROOT_WORKING_DIR / 'build'
+INSTALL_PREFIX = ROOT_WORKING_DIR / 'install'
 
 LLVM_REPO_URL = 'https://github.com/llvm/llvm-project.git'
-LLVM_RELEASE_BRANCH = 'llvmorg-10.0.0'
-LLVM_WORKING_DIR = ROOT_WORKING_DIR + 'llvm/'
+LLVM_RELEASE_BRANCH = 'llvmorg-10.0.1'
+LLVM_WORKING_DIR = ROOT_WORKING_DIR / 'llvm'
 
 # Use a GitHub mirror for now since it can probably handle repeated clones I'll do while testing
 # this better than a personal site.
 #MUSL_REPO_URL = 'https://git.musl-libc.org/cgit/musl.git'
 MUSL_REPO_URL = 'https://github.com/bminor/musl.git'
 MUSL_RELEASE_BRANCH = 'v1.2.0'
-MUSL_WORKING_DIR = ROOT_WORKING_DIR + 'musl/'
+MUSL_WORKING_DIR = ROOT_WORKING_DIR / 'musl'
 
-import subprocess
-import os
-import time
-import shutil
 
 def is_windows():
     '''Return True if this script is running in a Windows environment.  This returns False when run
@@ -88,6 +94,7 @@ def print_info_str(s):
     '''
     print('\n\x1b[7m' + s + '\x1b[27m\x1b[K\r\x1b[A', end='', flush=True)
 
+
 def run_subprocess(cmd_args, info_str, working_dir=None):
     '''Run the given command while printing the given step string at the end of output.
 
@@ -100,7 +107,7 @@ def run_subprocess(cmd_args, info_str, working_dir=None):
 
     The third argument is the working directory that should be set before running the command.  This
     can be None to have the command use the current working directory (the directory from which this
-    script was run).
+    script was run). This can be a string or a path-like object, such as something from pathlib.
     '''
     # Use ANSI control codes to put the info string on its own line and with reverse video (inverted
     # colors).
@@ -183,6 +190,7 @@ def clone_from_git(url, branch=None, dest_directory=None, skip_if_exists=False):
         else:
             raise
 
+
 # Notes:
 # -- Devices for which the datasheet claims as MIPS32r5 also have an FPU and vice versa. These are 
 #    the PIC32MZ EF and PIC32MK devices. All other devices with no FPU are assumed to be MIPS32r2.
@@ -190,41 +198,42 @@ def clone_from_git(url, branch=None, dest_directory=None, skip_if_exists=False):
 #    PIC32MZ EC have DSPr2, but not an FPU.
 # -- The previous note implies that all MIPS32r5 devices have the DSPr2 extension.
 # -- Only the PIC32MX series uses the older MIPS16 extension; none of them have an FPU or DSP ASE.
-MIPS32_MULTILIB_PREFIX = 'target/mips32/lib/'
-MIPS32_MULTILIBS = ['r2',
-                    'r2/mips16',
-                    'r2/micromips',
-                    'r2/micromips/dspr2', 
-                    'r2/dspr2',
-                    'r5/dspr2',
-                    'r5/dspr2/fpu64',
-                    'r5/micromips/dspr2',
-                    'r5/micromips/dspr2/fpu64']
+# -- It's not clear if Clang/LLVM cares about r2 vs r5 (it might only care about r6 vs rest).
+MIPS32_MULTILIB_PREFIX = PurePosixPath('target', 'mips32', 'lib')
+MIPS32_MULTILIBS = [PurePosixPath('r2'),
+                    PurePosixPath('r2', 'mips16'),
+                    PurePosixPath('r2', 'micromips'),
+                    PurePosixPath('r2', 'micromips', 'dspr2'), 
+                    PurePosixPath('r2', 'dspr2'),
+                    PurePosixPath('r5', 'dspr2'),
+                    PurePosixPath('r5', 'dspr2', 'fpu64'),
+                    PurePosixPath('r5', 'micromips', 'dspr2'),
+                    PurePosixPath('r5', 'micromips', 'dspr2', 'fpu64')]
 
 def get_mips_multilib_opts(multilib_path):
-    '''Return a string containing compiler options for a MIPS device based on the given multilib path.
+    '''Return a string containing compiler options for a MIPS device based on the given pathlib.Path
+    object representing a multilib path.
     '''
-    split_path = multilib_path.split('/')
     opts = '-target mipsel-unknown-elf'
 
     # MIPS32 architecture revision
-    if 'r5' in split_path:
+    if 'r5' in multilib_path.parts:
         opts += ' -march=mips32r5'
     else:
         opts += ' -march=mips32r2'
 
     # Compressed instruction set support
-    if 'mips16' in split_path:
+    if 'mips16' in multilib_path.parts:
         opts += ' -mips16'
-    if 'micromips' in split_path:
+    if 'micromips' in multilib_path.parts:
         opts += ' -mmicromips'
 
     # Application-specific Extensions (ASEs); only DSPr2 at this time.
-    if 'dspr2' in split_path:
+    if 'dspr2' in multilib_path.parts:
         opts += ' -mdspr2'
 
     # FPU
-    if 'fpu64' in split_path:
+    if 'fpu64' in multilib_path.parts:
         opts += ' -mhard-float -mfloat-abi=hard -mfp64'
     else:
         opts += ' -msoft-float -mfloat-abi=soft'
@@ -237,104 +246,101 @@ def get_mips_multilib_opts(multilib_path):
 
 # Notes:
 # -- The M0, M0+, M23, and M3 do not have an FPU.
-# -- The M4 has a 32-bit FPU.
-# -- The M7 has a 64-bit FPU.
-# -- The A5 can have either a normal 64-bit FPU or one with NEON.
+# -- The M4 has a 32-bit FPU; the M7 has a 64-bit FPU. These are Arm-v7em.
+# -- The A5 can have either a normal 64-bit FPU or one with NEON. This is ARm-v7a.
 # -- The M series is always Thumb, so we do not have to differentiate.
-CORTEX_M_MULTLIB_PREFIX = 'target/cortex-m/lib/'
-CORTEX_M_MULTILIBS = ['m0plus',
-                      'm23',
-                      'm3',
-                      'm4',
-                      'm4/vfp4-sp-d16',
-                      'm7',
-                      'm7/vfp5-dp-d16']
+CORTEX_M_MULTLIB_PREFIX = PurePosixPath('target', 'cortex-m', 'lib')
+CORTEX_M_MULTILIBS = [PurePosixPath('v6m'),
+                      PurePosixPath('v7m'),
+                      PurePosixPath('v7em'),
+                      PurePosixPath('v7em', 'vfp4-sp-d16'),
+                      PurePosixPath('v7em', 'vfp5-dp-d16'),
+                      PurePosixPath('v8m.base')]
 
-CORTEX_A_MULTILIB_PREIX = 'target/cortex-a/lib/'
-CORTEX_A_MULTILIBS = ['a5',
-                      'a5/vfp4-dp-d16',
-                      'a5/neon-vfpv4',
-                      'a5/thumb',
-                      'a5/thumb/vfp4-dp-d16',
-                      'a5/thumb/neon-vfpv4']
+CORTEX_A_MULTILIB_PREIX = PurePosixPath('target', 'cortex-a', 'lib')
+CORTEX_A_MULTILIBS = [PurePosixPath('v7a'),
+                      PurePosixPath('v7a', 'vfp4-dp-d16'),
+                      PurePosixPath('v7a', 'neon-vfpv4'),
+                      PurePosixPath('v7a', 'thumb'),
+                      PurePosixPath('v7a', 'thumb', 'vfp4-dp-d16'),
+                      PurePosixPath('v7a', 'thumb', 'neon-vfpv4')]
 
 def get_arm_multilib_opts(multilib_path):
-    '''Return a string containing compiler options for an Arm device based on the given multilib path.
+    '''Return a string containing compiler options for an Arm device based on the given pathlib.Path
+    object representing a multilib path.
     '''
-    split_path = multilib_path.split('/')
     opts = '-target arm-none-eabi'
 
-    # CPU name
-    if 'm0plus' in split_path:
-        opts += ' -march=armv6m -mtune=cortex-m0plus'
-    elif 'm23' in split_path:
-        opts += ' -march=armv8m.base -mtune=cortex-m23'
-    elif 'm3' in split_path:
-        opts += ' -march=armv7m -mtune=cortex-m3'
-    elif 'm4' in split_path:
-        opts += ' -march=armv7em -mtune=cortex-m4'
-    elif 'm7' in split_path:
-        opts += ' -march=armv7em -mtune=cortex-m7'
-    elif 'a5' in split_path:
-        opts += ' -march=armv7a -mtune=cortex-a5'
+    # Architecture name
+    if 'v6m' in multilib_path.parts:
+        opts += ' -march=armv6m'
+    elif 'v7m' in multilib_path.parts:
+        opts += ' -march=armv7m'
+    elif 'v7em' in multilib_path.parts:
+        opts += ' -march=armv7em'
+    elif 'v7a' in multilib_path.parts:
+        opts += ' -march=armv7a'
+    elif 'v8m.base' in multilib_path.parts:
+        opts += ' -march=armv8m.base'
 
     # Compressed instruction set
-    if 'thumb' in split_path:
+    if 'thumb' in multilib_path.parts:
         opts += ' -mthumb'
 
     # FPU name
-    if 'vfp4-sp-d16' in split_path:
+    if 'vfp4-sp-d16' in multilib_path.parts:
         opts += ' -mfpu=vfp4-sp-d16 -mfloat-abi=hard'
-    elif 'vfp4-dp-d16' in split_path:
+    elif 'vfp4-dp-d16' in multilib_path.parts:
         opts += ' -mfpu=vfp4-dp-d16 -mfloat-abi=hard'
-    elif 'vfp5-dp-d16' in split_path:
+    elif 'vfp5-dp-d16' in multilib_path.parts:
         opts += ' -mfpu=vfp5-dp-d16 -mfloat-abi=hard'
-    elif 'fp-armv8' in split_path:
+    elif 'fp-armv8' in multilib_path.parts:
         opts += ' -mfpu=fp-armv8 -mfloat-abi=hard'
-    elif 'neon-vfpv4' in split_path:
+    elif 'neon-vfpv4' in multilib_path.parts:
         opts += ' -mfpu=neon-vfpv4 -mfloat-abi=hard'
     else:
         opts += ' -msoft-float -mfloat-abi=soft'
 
     return opts
 
-OPTIMIZATION_MULTILIBS = ['',
-                          'o1',
-                          'o2',
-                          'o3',
-                          'os',
-                          'ofast',
-                          'oz',
-                          'fast-math',
-                          'fast-math/o1',
-                          'fast-math/o2',
-                          'fast-math/o3',
-                          'fast-math/os',
-                          'fast-math/ofast',
-                          'fast-math/oz']
+
+OPTIMIZATION_MULTILIBS = [PurePosixPath('.'),
+                          PurePosixPath('o1'),
+                          PurePosixPath('o2'),
+                          PurePosixPath('o3'),
+                          PurePosixPath('os'),
+                          PurePosixPath('ofast'),
+                          PurePosixPath('oz'),
+                          PurePosixPath('fast-math'),
+                          PurePosixPath('fast-math', 'o1'),
+                          PurePosixPath('fast-math', 'o2'),
+                          PurePosixPath('fast-math', 'o3'),
+                          PurePosixPath('fast-math', 'os'),
+                          PurePosixPath('fast-math', 'ofast'),
+                          PurePosixPath('fast-math', 'oz')]
 
 def get_optimization_multilib_opts(multilib_path):
-    '''Return a string containing optimization options based on the given multilib path.
+    '''Return a string containing optimization options based on the given pathlib.Path object
+    representing a multilib path.
     '''
-    split_path = multilib_path.split('/')
     opts = ''
 
     # Specific flags (just fast math for now)
-    if 'fast-math' in split_path:
+    if 'fast-math' in multilib_path.parts:
         opts += ' -ffast-math'
 
     # Optimization level
-    if 'o1' in split_path:
+    if 'o1' in multilib_path.parts:
         opts += ' -O1'
-    elif 'o2' in split_path:
+    elif 'o2' in multilib_path.parts:
         opts += ' -O2'
-    elif 'o3' in split_path:
+    elif 'o3' in multilib_path.parts:
         opts += ' -O3'
-    elif 'os' in split_path:
+    elif 'os' in multilib_path.parts:
         opts += ' -Os'
-    elif 'ofast' in split_path:
+    elif 'ofast' in multilib_path.parts:
         opts += ' -Ofast'
-    elif 'oz' in split_path:
+    elif 'oz' in multilib_path.parts:
         opts += ' -Oz'
     else:
         opts += ' -O0'
@@ -346,28 +352,101 @@ def build_llvm():
     This will remove any previous build directory so that a clean build is always performed. To
     avoid this, enter the directory using a command line and manually start a build from there.
     '''
-    llvm_build_dir = LLVM_WORKING_DIR + 'build/'
+    llvm_build_dir = BUILD_PREFIX / 'llvm'
+    llvm_install_dir = os.path.relpath(INSTALL_PREFIX, llvm_build_dir)
+    llvm_make_dir = os.path.relpath(LLVM_WORKING_DIR / 'llvm', llvm_build_dir)
 
     if os.path.exists(llvm_build_dir):
         shutil.rmtree(llvm_build_dir)
 
-    os.mkdir(llvm_build_dir)
+    os.makedirs(llvm_build_dir)
 
     llvm_targets = ['ARM', 'Mips']
-    llvm_projects = ['clang', 'clang-tools-extra', 'compiler-rt', 'debuginfo-tests', 'libc',
-                     'libclc', 'libcxx', 'libcxxabi', 'libunwind', 'lld', 'lldb', 'mlir', 'openmp',
-                     'parallel-libs', 'polly', 'pstl']
+
+    ######
+    # These are based on the example configs found in llvm/clang/cmake/caches. There are two configs
+    # for a 2-stage distrubtion build and another for a baremetal ARM build. The commented-out lines
+    # here contain all of the projects and runtimes, but we'll start with what the examples had.
+    #
+    #llvm_projects = ['clang', 'clang-tools-extra', 'debuginfo-tests', 'lld', 'lldb', 'mlir', 'polly']
+    #llvm_runtimes = ['compiler-rt', 'libc', 'libclc', 'libcxx', 'libcxxabi', 'libunwind', 'openmp',
+    #                 'parallel-libs', 'pstl']
+    llvm_projects = ['clang', 'clang-tools-extra', 'lld']
+    llvm_runtimes = ['compiler-rt', 'libcxx', 'libcxxabi']
 
     gen_build_cmd = ['cmake', '-G', 'Ninja', 
                      '-DCMAKE_BUILD_TYPE=Release',
-                     '-DCMAKE_INSTALL_PREFIX=../../install',
+                     '-DCMAKE_INSTALL_PREFIX=' + llvm_install_dir,
                      '-DLLVM_TARGETS_TO_BUILD=' + ';'.join(llvm_targets),
                      '-DLLVM_ENABLE_PROJECTS=' + ';'.join(llvm_projects),
-                     '../llvm']
+                     '-DLLVM_ENABLE_RUNTIMES=' + ';'.join(llvm_runtimes),
+                     '-DCLANG_DEFAULT_LINKER=lld',
+                     '-DCLANG_DEFAULT_CXX_STDLIB=libc++',
+                     '-DCLANG_DEFAULT_RTLIB=compiler-rt',
+                     '-DCLANG_DEFAULT_UNWINDLIB=libunwind',
+                     '-DCLANG_DEFAULT_OBJCOPY=llvm-objcopy',
+                     llvm_make_dir]
     run_subprocess(gen_build_cmd, 'Generate LLVM build scripts', llvm_build_dir)
 
     build_llvm_cmd = ['cmake', '--build', '.']
     run_subprocess(build_llvm_cmd, 'Build LLVM', llvm_build_dir)
+
+    install_llvm_cmd = ['cmake', '--build', '.', '--target', 'install']
+    run_subprocess(install_llvm_cmd, 'Install LLVM', llvm_build_dir)
+
+
+def build_llvm_libs():
+    '''Build libraries and portions of LLVM for the targets.
+
+    This needs to be called after LLVM itself has been built because this needs LLVM to build the
+    target libraries.
+    '''
+    libs_build_dir = BUILD_PREFIX / 'llvm_libs'
+    libs_install_dir = os.path.relpath(INSTALL_PREFIX / 'libs_build_test', libs_build_dir)
+    libs_make_dir = os.path.relpath(LLVM_WORKING_DIR / 'llvm', libs_build_dir)
+    clang_c_path = os.path.abspath(INSTALL_PREFIX / 'bin' / 'clang')
+    clang_cxx_path = os.path.abspath(INSTALL_PREFIX / 'bin' / 'clang++')
+    clang_lld_path = os.path.abspath(INSTALL_PREFIX / 'bin' / 'lld')
+    clang_sysroot = os.path.abspath(INSTALL_PREFIX)
+
+    if os.path.exists(libs_build_dir):
+        shutil.rmtree(libs_build_dir)
+
+    os.makedirs(libs_build_dir)
+
+    libs_projects = ['compiler-rt', 'libc', 'libclc', 'libcxx', 'libcxxabi', 'libunwind', 'openmp',
+                     'parallel-libs', 'pstl']
+    make_flags = ['-v',
+                  '--sysroot=' + clang_sysroot,
+                  '-target mipsel-unknown-linux',
+                  '-march=mips32r2',
+                  '-msoft-float',
+                  '-G0',
+                  '-static']
+
+    gen_build_cmd = ['cmake', '-G', 'Ninja', 
+                     '-DCMAKE_CROSSCOMPILING=ON',
+                     '-DCMAKE_C_COMPILER=\'' + clang_c_path + '\'',
+                     '-DCMAKE_CXX_COMPILER=\'' + clang_cxx_path + '\'',
+                     '-DCMAKE_BUILD_TYPE=Release',
+                     '-DCMAKE_INSTALL_PREFIX=' + libs_install_dir,
+                     '-DLLVM_TARGETS_TO_BUILD=Mips',
+                     '-DLLVM_TARGET_ARCH=Mips',
+                     '-DLLVM_DEFAULT_TARGET_TRIPLE=mipsel-unknown-elf',
+                     '-DCMAKE_C_FLAGS=\'' + ' '.join(make_flags) + '\'',
+                     '-DCMAKE_CXX_FLAGS=\'' + ' '.join(make_flags) + '\'',
+                     '-DLLVM_ENABLE_PROJECTS=' + ';'.join(libs_projects),
+                     '-DLLVM_ENABLE_LLD=ON',
+                     '-DCMAKE_EXE_LINKER_FLAGS=-fuse-ld=lld',
+                     libs_make_dir]
+    run_subprocess(gen_build_cmd, 'Generate LLVM library build scripts', libs_build_dir)
+
+    build_libs_cmd = ['cmake', '--build', '.']
+    run_subprocess(build_libs_cmd, 'Build LLVM libraries', libs_build_dir)
+
+    install_libs_cmd = ['cmake', '--build', '.', '--target', 'install']
+    run_subprocess(install_libs_cmd, 'Install LLVM libraries', libs_build_dir)
+    
 
 
 # This is true when this file is executed as a script rather than imported into another file.  We
@@ -388,7 +467,11 @@ if '__main__' == __name__:
     clone_from_git(LLVM_REPO_URL, LLVM_RELEASE_BRANCH, LLVM_WORKING_DIR, skip_if_exists=True)
     clone_from_git(MUSL_REPO_URL, MUSL_RELEASE_BRANCH, MUSL_WORKING_DIR, skip_if_exists=True)
 
+    #print("\n*****\nBUILD LLVM COMMENTED OUT\n*****\n")
     build_llvm()
+
+    #print("\n*****\nBUILD LIBS COMMENTED OUT\n*****\n")
+    build_llvm_libs()
 
     # Do this extra print because otherwise the info string will be below where the command prompt
     # re-appears after this ends.
