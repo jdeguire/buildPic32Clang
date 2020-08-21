@@ -76,7 +76,7 @@ MUSL_REPO_URL = 'https://github.com/bminor/musl.git'
 MUSL_RELEASE_BRANCH = 'v1.2.1'
 MUSL_WORKING_DIR = ROOT_WORKING_DIR / 'musl'
 
-CMAKE_CACHE_DIR = PurePosixPath(os.path.dirname(os.path.realpath(__file__)), 'cmake')
+CMAKE_CACHE_DIR = PurePosixPath(os.path.dirname(os.path.realpath(__file__)), 'cmake_caches')
 
 
 def is_windows():
