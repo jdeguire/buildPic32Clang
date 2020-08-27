@@ -76,7 +76,7 @@ MUSL_REPO_URL = 'https://github.com/bminor/musl.git'
 MUSL_RELEASE_BRANCH = 'v1.2.1'
 MUSL_WORKING_DIR = ROOT_WORKING_DIR / 'musl'
 
-CMAKE_CACHE_DIR = PurePosixPath(os.path.dirname(os.path.realpath(__file__)), 'cmake')
+CMAKE_CACHE_DIR = PurePosixPath(os.path.dirname(os.path.realpath(__file__)), 'cmake_caches')
 
 
 def is_windows():
@@ -379,6 +379,9 @@ def build_llvm():
     # for a 2-stage distrubtion build and another for a baremetal ARM build. The commented-out lines
     # here contain all of the projects and runtimes, but we'll start with what the examples had.
     #
+    # NOTE: By default, the CMake cache files build the stage2 compiler with LTO. This takes forever
+    # and is not important for testing, so the below command disables it for now.
+    #
     #llvm_projects = ['clang', 'clang-tools-extra', 'debuginfo-tests', 'lld', 'lldb', 'mlir', 'polly']
     #llvm_runtimes = ['compiler-rt', 'libc', 'libclc', 'libcxx', 'libcxxabi', 'libunwind', 'openmp',
     #                 'parallel-libs', 'pstl']
@@ -399,6 +402,7 @@ def build_llvm():
     #                 llvm_make_dir]
     gen_build_cmd = ['cmake', '-G', 'Ninja',
                      '-DCMAKE_INSTALL_PREFIX=' + llvm_install_dir,
+                     '-DBOOTSTRAP_LLVM_ENABLE_LTO=OFF',
                      '-C', llvm_cmake_config_path,
                      llvm_make_dir]
     run_subprocess(gen_build_cmd, 'Generate LLVM build scripts', llvm_build_dir)
