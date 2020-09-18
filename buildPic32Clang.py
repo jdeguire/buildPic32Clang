@@ -429,7 +429,7 @@ def build_musl():
 
     musl_env = os.environ.copy()
     musl_env['CC'] = clang_c_path
-    musl_env['CFLAGS'] = '--target=arm-none-eabi -march=armv6m -msoft-float -mfloat-abi=soft'
+    musl_env['CFLAGS'] = '--target=arm-none-eabi -march=armv7m -mthumb -msoft-float -mfloat-abi=soft'
     gen_build_cmd = [musl_make_dir + '/configure', 
                      '--prefix=' + musl_install_dir,
                      '--disable-shared',
