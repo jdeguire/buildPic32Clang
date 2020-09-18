@@ -97,7 +97,7 @@ def print_info_str(s):
     print('\n\x1b[7m' + s + '\x1b[27m\x1b[K\r\x1b[A', end='', flush=True)
 
 
-def run_subprocess(cmd_args, info_str, working_dir=None):
+def run_subprocess(cmd_args, info_str, working_dir=None, penv=None, use_shell=False):
     '''Run the given command while printing the given step string at the end of output.
 
     Run the command given by the list cmd_args in which the first item in the list is the name of
@@ -110,6 +110,17 @@ def run_subprocess(cmd_args, info_str, working_dir=None):
     The third argument is the working directory that should be set before running the command.  This
     can be None to have the command use the current working directory (the directory from which this
     script was run). This can be a string or a path-like object, such as something from pathlib.
+
+    The fourth argument is a map of environment variables to use. If this is None, then the
+    environment is inherited from this process. Otherwise, it must be a map in which the keys are
+    the variables names and the values are the variable values.
+
+    The fifth argument indicates if the process needs to be run in a terminal shell. This generally
+    would be needed only if the command were a shell command, such as 'ls' on a Bash shell or 'dir'
+    on the Windows command prompt, or shell scripts like the 'configure' that many projects use. If
+    this is True, then 'cmd_args' should be a single string formatted just like it would be if the
+    command were typed into the terminal. See the Python documentation for subprocess.Popen() for
+    more info.
     '''
     if info_str:
         print_info_str(info_str)
@@ -117,7 +128,7 @@ def run_subprocess(cmd_args, info_str, working_dir=None):
     prev_output = ''
     remaining_output = ''
     proc = subprocess.Popen(cmd_args, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=False, 
-                            cwd=working_dir, bufsize=0)
+                            cwd=working_dir, bufsize=0, env=penv, shell=use_shell)
 
     while None == proc.poll():
         while True:
@@ -214,7 +225,7 @@ def get_mips_multilib_opts(multilib_path):
     '''Return a string array containing compiler options for a MIPS device based on the given
     pathlib.Path object representing a multilib path.
     '''
-    opts = ['-target', 'mipsel-unknown-elf']
+    opts = ['-target', 'mipsel-linux-gnu']
 
     # MIPS32 architecture revision
     if 'r5' in multilib_path.parts:
@@ -235,11 +246,9 @@ def get_mips_multilib_opts(multilib_path):
     # FPU
     if 'fpu64' in multilib_path.parts:
         opts.append('-mhard-float')
-        opts.append('-mfloat-abi=hard')
         opts.append('-mfp64')
     else:
         opts.append('-msoft-float')
-        opts.append('-mfloat-abi=soft')
 
     # This option prevents libraries from putting small globals into the small data sections. This
     # is the safest option since an application can control the size threshold with '-G<size>'.
@@ -319,24 +328,13 @@ OPTIMIZATION_MULTILIBS = [PurePosixPath('.'),
                           PurePosixPath('o3'),
                           PurePosixPath('os'),
                           PurePosixPath('ofast'),
-                          PurePosixPath('oz'),
-                          PurePosixPath('fast-math'),
-                          PurePosixPath('fast-math', 'o1'),
-                          PurePosixPath('fast-math', 'o2'),
-                          PurePosixPath('fast-math', 'o3'),
-                          PurePosixPath('fast-math', 'os'),
-                          PurePosixPath('fast-math', 'ofast'),
-                          PurePosixPath('fast-math', 'oz')]
+                          PurePosixPath('oz')]
 
 def get_optimization_multilib_opts(multilib_path):
     '''Return a string array containing optimization options based on the given pathlib.Path object
     representing a multilib path.
     '''
     opts = []
-
-    # Specific flags (just fast math for now)
-    if 'fast-math' in multilib_path.parts:
-        opts.append('-ffast-math')
 
     # Optimization level
     if 'o1' in multilib_path.parts:
@@ -375,18 +373,16 @@ def build_llvm():
     #llvm_targets = ['ARM', 'Mips']
 
     ######
-    # These are based on the example configs found in llvm/clang/cmake/caches. There are two configs
-    # for a 2-stage distrubtion build and another for a baremetal ARM build. The commented-out lines
-    # here contain all of the projects and runtimes, but we'll start with what the examples had.
+    # The CMake cache files used here are based on the example configs found in
+    # llvm/clang/cmake/caches that build a 2-stage distribution of LLVM/Clang. The 'stage1' cache
+    # file already references the 'stage2' file, so we don't need to do anything with 'stage2' here.
+    # The commented-out lines here contain all of the projects, but we'll start with what the
+    # examples had.
     #
     # NOTE: By default, the CMake cache files build the stage2 compiler with LTO. This takes forever
     # and is not important for testing, so the below command disables it for now.
     #
     #llvm_projects = ['clang', 'clang-tools-extra', 'debuginfo-tests', 'lld', 'lldb', 'mlir', 'polly']
-    #llvm_runtimes = ['compiler-rt', 'libc', 'libclc', 'libcxx', 'libcxxabi', 'libunwind', 'openmp',
-    #                 'parallel-libs', 'pstl']
-    #llvm_projects = ['clang', 'clang-tools-extra', 'lld']
-    #llvm_runtimes = ['compiler-rt', 'libcxx', 'libcxxabi']
 
     #gen_build_cmd = ['cmake', '-G', 'Ninja', 
     #                 '-DCMAKE_BUILD_TYPE=Release',
@@ -407,27 +403,67 @@ def build_llvm():
                      llvm_make_dir]
     run_subprocess(gen_build_cmd, 'Generate LLVM build scripts', llvm_build_dir)
 
-    #build_llvm_cmd = ['cmake', '--build', '.']
     build_llvm_cmd = ['cmake', '--build', '.', '--target', 'stage2-distribution']
     run_subprocess(build_llvm_cmd, 'Build LLVM', llvm_build_dir)
 
-    #install_llvm_cmd = ['cmake', '--build', '.', '--target', 'install']
     install_llvm_cmd = ['cmake', '--build', '.', '--target', 'stage2-install-distribution']
     run_subprocess(install_llvm_cmd, 'Install LLVM', llvm_build_dir)
 
+def build_musl():
+    '''Build the Musl C library for the targets.
 
-def build_llvm_libs():
-    '''Build libraries and portions of LLVM for the targets.
+    This needs to be called after LLVM itself has been built because this needs LLVM to build Musl.
+    Musl is just one library, but for compatibility with other C libraries Musl will build empty
+    versions of libm, libpthread, and a few others. 
+    '''
+    musl_build_dir = BUILD_PREFIX / 'musl'
+    musl_install_dir = os.path.relpath(INSTALL_PREFIX / 'musl', musl_build_dir)
+    musl_make_dir = os.path.relpath(MUSL_WORKING_DIR, musl_build_dir)
+    
+    clang_c_path = os.path.abspath(INSTALL_PREFIX / 'bin' / 'clang')
+
+    if os.path.exists(musl_build_dir):
+        shutil.rmtree(musl_build_dir)
+
+    os.makedirs(musl_build_dir)
+
+    musl_env = os.environ.copy()
+    musl_env['CC'] = clang_c_path
+    musl_env['CFLAGS'] = '--target=arm-none-eabi -march=armv6m -msoft-float -mfloat-abi=soft'
+    gen_build_cmd = [musl_make_dir + '/configure', 
+                     '--prefix=' + musl_install_dir,
+                     '--disable-shared',
+                     '--disable-wrapper',
+                     '--disable-optimize',
+                     '--enable-debug',
+                     '--target=arm-none-eabi']
+    if is_windows():
+        gen_build_cmd = ['sh.exe'] + gen_build_cmd
+    run_subprocess(gen_build_cmd, 'Configure Musl', musl_build_dir, penv=musl_env)
+
+    build_musl_cmd = ['make']
+    run_subprocess(build_musl_cmd, 'Build Musl', musl_build_dir, penv=musl_env)
+
+    install_musl_cmd = ['make', 'install']
+    run_subprocess(install_musl_cmd, 'Install Musl', musl_build_dir, penv=musl_env)
+
+def build_llvm_runtimes():
+    '''Build LLVM runtime libraries for the targets.
 
     This needs to be called after LLVM itself has been built because this needs LLVM to build the
     target libraries.
     '''
     libs_build_dir = BUILD_PREFIX / 'llvm_libs'
-    libs_install_dir = os.path.relpath(INSTALL_PREFIX / 'libs_build_test', libs_build_dir)
+    libs_install_dir = os.path.relpath(INSTALL_PREFIX / 'runtimes', libs_build_dir)
     libs_make_dir = os.path.relpath(LLVM_WORKING_DIR / 'llvm', libs_build_dir)
-    clang_c_path = os.path.abspath(INSTALL_PREFIX / 'bin' / 'clang')
-    clang_cxx_path = os.path.abspath(INSTALL_PREFIX / 'bin' / 'clang++')
-    clang_lld_path = os.path.abspath(INSTALL_PREFIX / 'bin' / 'lld')
+    libs_cmake_config_path = os.path.relpath(CMAKE_CACHE_DIR / 'pic32clang-llvm-runtimes.cmake',
+                                             libs_build_dir)
+    #libs_musl_include_path = os.path.relpath(MUSL_WORKING_DIR / 'include', libs_build_dir)
+    libs_musl_include_path = os.path.abspath(MUSL_WORKING_DIR / 'include')
+
+    #clang_c_path = os.path.abspath(INSTALL_PREFIX / 'bin' / 'clang')
+    #clang_cxx_path = os.path.abspath(INSTALL_PREFIX / 'bin' / 'clang++')
+    #clang_lld_path = os.path.abspath(INSTALL_PREFIX / 'bin' / 'lld')
     clang_sysroot = os.path.abspath(INSTALL_PREFIX)
 
     if os.path.exists(libs_build_dir):
@@ -435,38 +471,58 @@ def build_llvm_libs():
 
     os.makedirs(libs_build_dir)
 
-    libs_projects = ['compiler-rt', 'libc', 'libclc', 'libcxx', 'libcxxabi', 'libunwind', 'openmp',
-                     'parallel-libs', 'pstl']
-    make_flags = ['-v',
-                  '--sysroot=' + clang_sysroot,
-                  '-target mipsel-unknown-linux',
-                  '-march=mips32r2',
-                  '-msoft-float',
-                  '-G0',
-                  '-static']
+    ######
+    # The CMake cache file used here are based on the example config found in
+    # llvm/clang/cmake/caches that builds a baremetal Arm toolchain. The commented-out lines here
+    # contain all of the runtimes, but we'll start with what the examples had. We'll also need to
+    # figure out how to build for MIPS and all of the different Arm variants, such as with and
+    # without FPU.
+    #
+    # This cache might build a compiler as well, so another task is to figure out how to make it just
+    # build the libraries and runtimes.
+    #
+    #libs_projects = ['compiler-rt', 'libc', 'libclc', 'libcxx', 'libcxxabi', 'libunwind', 'openmp',
+    #                 'parallel-libs', 'pstl']
+    #make_flags = ['-v',
+    #              '--sysroot=' + clang_sysroot,
+    #              '-target mipsel-unknown-linux',
+    #              '-march=mips32r2',
+    #              '-msoft-float',
+    #              '-G0',
+    #              '-static']
+
+    #gen_build_cmd = ['cmake', '-G', 'Ninja', 
+    #                 '-DCMAKE_CROSSCOMPILING=ON',
+    #                 '-DCMAKE_C_COMPILER=\'' + clang_c_path + '\'',
+    #                 '-DCMAKE_CXX_COMPILER=\'' + clang_cxx_path + '\'',
+    #                 '-DCMAKE_BUILD_TYPE=Release',
+    #                 '-DCMAKE_INSTALL_PREFIX=' + libs_install_dir,
+    #                 '-DLLVM_TARGETS_TO_BUILD=Mips',
+    #                 '-DLLVM_TARGET_ARCH=Mips',
+    #                 '-DLLVM_DEFAULT_TARGET_TRIPLE=mipsel-unknown-elf',
+    #                 '-DCMAKE_C_FLAGS=\'' + ' '.join(make_flags) + '\'',
+    #                 '-DCMAKE_CXX_FLAGS=\'' + ' '.join(make_flags) + '\'',
+    #                 '-DLLVM_ENABLE_PROJECTS=' + ';'.join(libs_projects),
+    #                 '-DLLVM_ENABLE_LLD=ON',
+    #                 '-DCMAKE_EXE_LINKER_FLAGS=-fuse-ld=lld',
+    #                 libs_make_dir]
+    extra_runtime_opts = ['-isystem', '"' + libs_musl_include_path + '"']
 
     gen_build_cmd = ['cmake', '-G', 'Ninja', 
-                     '-DCMAKE_CROSSCOMPILING=ON',
-                     '-DCMAKE_C_COMPILER=\'' + clang_c_path + '\'',
-                     '-DCMAKE_CXX_COMPILER=\'' + clang_cxx_path + '\'',
-                     '-DCMAKE_BUILD_TYPE=Release',
+                     '-DBAREMETAL_ARMV6M_SYSROOT=' + clang_sysroot,
+                     '-DBAREMETAL_ARMV7M_SYSROOT=' + clang_sysroot,
+                     '-DBAREMETAL_ARMV7EM_SYSROOT=' + clang_sysroot,
                      '-DCMAKE_INSTALL_PREFIX=' + libs_install_dir,
-                     '-DLLVM_TARGETS_TO_BUILD=Mips',
-                     '-DLLVM_TARGET_ARCH=Mips',
-                     '-DLLVM_DEFAULT_TARGET_TRIPLE=mipsel-unknown-elf',
-                     '-DCMAKE_C_FLAGS=\'' + ' '.join(make_flags) + '\'',
-                     '-DCMAKE_CXX_FLAGS=\'' + ' '.join(make_flags) + '\'',
-                     '-DLLVM_ENABLE_PROJECTS=' + ';'.join(libs_projects),
-                     '-DLLVM_ENABLE_LLD=ON',
-                     '-DCMAKE_EXE_LINKER_FLAGS=-fuse-ld=lld',
+                     '-DPIC32CLANG_EXTRA_FLAGS=' + ';'.join(extra_runtime_opts),
+                     '-C', libs_cmake_config_path,
                      libs_make_dir]
-    run_subprocess(gen_build_cmd, 'Generate LLVM library build scripts', libs_build_dir)
+    run_subprocess(gen_build_cmd, 'Generate LLVM runtime libraries build scripts', libs_build_dir)
 
     build_libs_cmd = ['cmake', '--build', '.']
-    run_subprocess(build_libs_cmd, 'Build LLVM libraries', libs_build_dir)
+    run_subprocess(build_libs_cmd, 'Build LLVM runtime libraries', libs_build_dir)
 
     install_libs_cmd = ['cmake', '--build', '.', '--target', 'install']
-    run_subprocess(install_libs_cmd, 'Install LLVM libraries', libs_build_dir)
+    run_subprocess(install_libs_cmd, 'Install LLVM runtime libraries', libs_build_dir)
     
 
 
@@ -482,11 +538,14 @@ if '__main__' == __name__:
     clone_from_git(LLVM_REPO_URL, LLVM_RELEASE_BRANCH, LLVM_WORKING_DIR, skip_if_exists=True)
     clone_from_git(MUSL_REPO_URL, MUSL_RELEASE_BRANCH, MUSL_WORKING_DIR, skip_if_exists=True)
 
-    #print("\n*****\nBUILD LLVM COMMENTED OUT\n*****\n")
-    build_llvm()
+    print("\n*****\nBUILD LLVM COMMENTED OUT\n*****\n")
+    #build_llvm()
 
-    print("\n*****\nBUILD LIBS COMMENTED OUT\n*****\n")
-    #build_llvm_libs()
+    #print("\n*****\nBUILD MUSL COMMENTED OUT\n*****\n")
+    build_musl()
+
+    print("\n*****\nBUILD RUNTIMES COMMENTED OUT\n*****\n")
+    #build_llvm_runtimes()
 
     # Do this extra print because otherwise the info string will be below where the command prompt
     # re-appears after this ends.
