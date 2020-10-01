@@ -136,7 +136,7 @@ def run_subprocess(cmd_args, info_str, working_dir=None, penv=None, use_shell=Fa
             # to disable this, but not on Windows.
             output = proc.stdout.read(256).decode('utf-8', 'backslashreplace')
             if not output:
-                break;
+                break
 
             out_lines = output.rsplit('\n', 1)
             if len(out_lines) > 1:
@@ -419,17 +419,31 @@ def build_musl():
     musl_build_dir = BUILD_PREFIX / 'musl'
     musl_install_dir = os.path.relpath(INSTALL_PREFIX / 'musl', musl_build_dir)
     musl_make_dir = os.path.relpath(MUSL_WORKING_DIR, musl_build_dir)
-    
+
     clang_c_path = os.path.abspath(INSTALL_PREFIX / 'bin' / 'clang')
+    llvm_ar_path = os.path.abspath(INSTALL_PREFIX / 'bin' / 'llvm-ar')
 
     if os.path.exists(musl_build_dir):
         shutil.rmtree(musl_build_dir)
 
     os.makedirs(musl_build_dir)
 
+    #num_cpus = os.cpu_count()
+    #if None == num_cpus or num_cpus < 1:
+    #    num_cpus = 1
+    num_cpus = 1
+
+    #####
+    # Notes:
+    # --We need -mimplicit-it=always when building this for Thumb2 (and probably Thumb). This is
+    #   probably because I'm giving Musl a target of arm-none-eabi rather than armv7m-none-eabi.
+    # --A new version of Musl is available and its configure script lets us set AR and RANLIB
+
     musl_env = os.environ.copy()
+    musl_env['AR'] = llvm_ar_path
+    musl_env['RANLIB'] = llvm_ar_path + ' -s'
     musl_env['CC'] = clang_c_path
-    musl_env['CFLAGS'] = '--target=arm-none-eabi -march=armv7m -mthumb -msoft-float -mfloat-abi=soft'
+    musl_env['CFLAGS'] = '--target=arm-none-eabi -march=armv6m -msoft-float -mfloat-abi=soft -mimplicit-it=always'
     gen_build_cmd = [musl_make_dir + '/configure', 
                      '--prefix=' + musl_install_dir,
                      '--disable-shared',
@@ -441,10 +455,10 @@ def build_musl():
         gen_build_cmd = ['sh.exe'] + gen_build_cmd
     run_subprocess(gen_build_cmd, 'Configure Musl', musl_build_dir, penv=musl_env)
 
-    build_musl_cmd = ['make']
+    build_musl_cmd = ['make', '-j' + str(num_cpus)]
     run_subprocess(build_musl_cmd, 'Build Musl', musl_build_dir, penv=musl_env)
 
-    install_musl_cmd = ['make', 'install']
+    install_musl_cmd = ['make', '-j' + str(num_cpus), 'install']
     run_subprocess(install_musl_cmd, 'Install Musl', musl_build_dir, penv=musl_env)
 
 def build_llvm_runtimes():

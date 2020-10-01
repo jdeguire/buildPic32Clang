@@ -17,6 +17,7 @@ set(CMAKE_C_FLAGS_RELWITHDEBINFO "-O3 -gline-tables-only -DNDEBUG" CACHE STRING 
 set(CMAKE_CXX_FLAGS_RELWITHDEBINFO "-O3 -gline-tables-only -DNDEBUG" CACHE STRING "")
 
 # setup toolchain
+# these are names of subdirectories under "llvm/llvm/tools"
 set(LLVM_INSTALL_TOOLCHAIN_ONLY ON CACHE BOOL "")
 set(LLVM_TOOLCHAIN_TOOLS
   dsymutil
@@ -27,6 +28,7 @@ set(LLVM_TOOLCHAIN_TOOLS
   llvm-objdump
   llvm-nm
   llvm-size
+  llvm-ar
   CACHE STRING "")
 
 set(LLVM_DISTRIBUTION_COMPONENTS
