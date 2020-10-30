@@ -66,7 +66,7 @@ BUILD_PREFIX = ROOT_WORKING_DIR / 'build'
 INSTALL_PREFIX = ROOT_WORKING_DIR / 'install'
 
 LLVM_REPO_URL = 'https://github.com/llvm/llvm-project.git'
-LLVM_RELEASE_BRANCH = 'llvmorg-10.0.1'
+LLVM_RELEASE_BRANCH = 'llvmorg-11.0.0'
 LLVM_WORKING_DIR = ROOT_WORKING_DIR / 'llvm'
 
 # Use a GitHub mirror for now since it can probably handle repeated clones I'll do while testing
@@ -437,13 +437,14 @@ def build_musl():
     # Notes:
     # --We need -mimplicit-it=always when building this for Thumb2 (and probably Thumb). This is
     #   probably because I'm giving Musl a target of arm-none-eabi rather than armv7m-none-eabi.
-    # --A new version of Musl is available and its configure script lets us set AR and RANLIB
+    # --We need -fomit-frame-pointer on at least Armv6-m or else Clang will complain that a syscall 
+    #   routine uses up too many registers.
 
     musl_env = os.environ.copy()
     musl_env['AR'] = llvm_ar_path
     musl_env['RANLIB'] = llvm_ar_path + ' -s'
     musl_env['CC'] = clang_c_path
-    musl_env['CFLAGS'] = '--target=arm-none-eabi -march=armv6m -msoft-float -mfloat-abi=soft -mimplicit-it=always'
+    musl_env['CFLAGS'] = '--target=arm-none-eabi -march=armv6m -msoft-float -mfloat-abi=soft -mimplicit-it=always -fomit-frame-pointer'
     gen_build_cmd = [musl_make_dir + '/configure', 
                      '--prefix=' + musl_install_dir,
                      '--disable-shared',
