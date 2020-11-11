@@ -5,3 +5,6 @@ __pycache__/
 
 # Visual Studio Code preferences
 .vscode/*
+
+# Ignore the build/src directory
+pic32clang/
