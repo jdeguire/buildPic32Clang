@@ -85,16 +85,22 @@ def is_windows():
     '''
     return 'nt' == os.name
 
-def clear_info_str():
-    '''Use ANSI control codes to clear a previously-written info string from the console.
+def print_line_with_info_str(line, info_str):
+    '''Print the given line while also using ANSI control codes to print the given info string in 
+    inverted colors below it. The cursor will be on a new line when this is done.
     '''
-    print('\n\x1b[K\x1b[A', end='')
+    # Finish the current line before moving to the next by printing everything before the first newline.
+    split_line = line.split('\n', 1)
+    print(split_line[0], end='')
 
-def print_info_str(s):
-    '''Use ANSI control codes to print an info string in inverted colors to the end of the console
-    output.
-    '''
-    print('\n\x1b[7m' + s + '\x1b[27m\x1b[K\r\x1b[A', end='', flush=True)
+    # '7m' enables inverted colors (reverse video)
+    # '27m' disabled inverted colors
+    # 'K' clears the rest of the line starting at the cursor
+    # 'A' moves up one line
+    print('\n\x1b[K\x1b[A', end='')
+    if len(split_line) > 1:
+        print('\n' + split_line[1], end='')
+    print('\n\n\x1b[7m' + info_str + '\x1b[27m\x1b[K\r\x1b[A', end='', flush=True)
 
 
 def run_subprocess(cmd_args, info_str, working_dir=None, penv=None, use_shell=False):
@@ -123,7 +129,7 @@ def run_subprocess(cmd_args, info_str, working_dir=None, penv=None, use_shell=Fa
     more info.
     '''
     if info_str:
-        print_info_str(info_str)
+        print_line_with_info_str('', info_str)
 
     prev_output = ''
     remaining_output = ''
@@ -141,9 +147,7 @@ def run_subprocess(cmd_args, info_str, working_dir=None, penv=None, use_shell=Fa
             out_lines = output.rsplit('\n', 1)
             if len(out_lines) > 1:
                 # Found newline, so print what we found (rsplit removes the delimiter).
-                clear_info_str()
-                print(remaining_output + out_lines[0] + '\n', end='')
-                print_info_str(info_str)
+                print_line_with_info_str(remaining_output + out_lines[0], info_str)
                 remaining_output = out_lines[1]
             else:
                 print(remaining_output + out_lines[0], end='', flush=True)
@@ -157,9 +161,7 @@ def run_subprocess(cmd_args, info_str, working_dir=None, penv=None, use_shell=Fa
     remaining_output += proc.stdout.read().decode('utf-8', 'backslashreplace')
 
     if remaining_output:
-        clear_info_str()
-        print(remaining_output, end='')
-        print_info_str(info_str)
+        print_line_with_info_str(remaining_output, info_str)
 
     # For now, emulate what subprocess.run() would have done on a non-zero return code, which is
     # raise CalledProcessError.  This will include the last bit of output from the command as that
@@ -439,6 +441,11 @@ def build_musl():
     #   probably because I'm giving Musl a target of arm-none-eabi rather than armv7m-none-eabi.
     # --We need -fomit-frame-pointer on at least Armv6-m or else Clang will complain that a syscall 
     #   routine uses up too many registers.
+    # --The configure script just generates a config.mak file in the build directory. It might be easier
+    #   to either just generate that here or add all of those value to the environment. This would mean
+    #   not having to run the script on Windows, but it does mean we may fall behind script updates.
+    # --For Armv7(E)-M, Clang defines both __thumb__ and __thumb2__.
+    # --For Armv6-M and Armv8-M.base, only __thumb__ is defined.
 
     musl_env = os.environ.copy()
     musl_env['AR'] = llvm_ar_path
