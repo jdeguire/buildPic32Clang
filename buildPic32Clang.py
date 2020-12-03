@@ -227,7 +227,7 @@ def get_mips_multilib_opts(multilib_path):
     '''Return a string array containing compiler options for a MIPS device based on the given
     pathlib.Path object representing a multilib path.
     '''
-    opts = ['-target', 'mipsel-linux-gnu']
+    opts = ['-target', 'mipsel-linux-gnu-musl']
 
     # MIPS32 architecture revision
     if 'r5' in multilib_path.parts:
@@ -269,7 +269,12 @@ CORTEX_M_MULTILIBS = [PurePosixPath('v6m'),
                       PurePosixPath('v7em'),
                       PurePosixPath('v7em', 'vfp4-sp-d16'),
                       PurePosixPath('v7em', 'vfp5-dp-d16'),
-                      PurePosixPath('v8m.base')]
+                      PurePosixPath('v8m.base'),
+#                      PurePosixPath('v8m.main'),
+#                      PurePosixPath('v8m.main', 'vfp5-sp-d16'),
+#                      PurePosixPath('v8.1m.main'),
+#                      PurePosixPath('v8.1m.main', 'fp-armv8-fullfp16-d16')
+                      ]
 
 CORTEX_A_MULTILIB_PREIX = PurePosixPath('target', 'cortex-a', 'lib')
 CORTEX_A_MULTILIBS = [PurePosixPath('v7a'),
@@ -283,7 +288,7 @@ def get_arm_multilib_opts(multilib_path):
     '''Return a string array containing compiler options for an Arm device based on the given
     pathlib.Path object representing a multilib path.
     '''
-    opts = ['-target', 'arm-none-eabi']
+    opts = ['-target', 'arm-none-eabi-musl']
 
     # Architecture name
     if 'v6m' in multilib_path.parts:
@@ -296,6 +301,10 @@ def get_arm_multilib_opts(multilib_path):
         opts.append('-march=armv7a')
     elif 'v8m.base' in multilib_path.parts:
         opts.append('-march=armv8m.base')
+    elif 'v8m.main' in multilib_path.parts:
+        opts.append('-march=armv8m.main')
+    elif 'v8.1m.main' in multilib_path.parts:
+        opts.append('-march=armv8.1m.main')
 
     # Compressed instruction set
     if 'thumb' in multilib_path.parts:
@@ -308,11 +317,17 @@ def get_arm_multilib_opts(multilib_path):
     elif 'vfp4-dp-d16' in multilib_path.parts:
         opts.append('-mfpu=vfp4-dp-d16')
         opts.append('-mfloat-abi=hard')
+    elif 'vfp5-sp-d16' in multilib_path.parts:
+        opts.append('-mfpu=vfp5-sp-d16')
+        opts.append('-mfloat-abi=hard')
     elif 'vfp5-dp-d16' in multilib_path.parts:
         opts.append('-mfpu=vfp5-dp-d16')
         opts.append('-mfloat-abi=hard')
     elif 'fp-armv8' in multilib_path.parts:
         opts.append('-mfpu=fp-armv8')
+        opts.append('-mfloat-abi=hard')
+    elif 'fp-armv8-fullfp16-d16' in multilib_path.parts:
+        opts.append('-mfpu=fp-armv8-fullfp16-d16')
         opts.append('-mfloat-abi=hard')
     elif 'neon-vfpv4' in multilib_path.parts:
         opts.append('-mfpu=neon-vfpv4')
@@ -451,14 +466,14 @@ def build_musl():
     musl_env['AR'] = llvm_ar_path
     musl_env['RANLIB'] = llvm_ar_path + ' -s'
     musl_env['CC'] = clang_c_path
-    musl_env['CFLAGS'] = '--target=arm-none-eabi -march=armv6m -msoft-float -mfloat-abi=soft -mimplicit-it=always -fomit-frame-pointer'
+    musl_env['CFLAGS'] = '--target=arm-none-eabi-musl -march=armv8m.base -msoft-float -mfloat-abi=soft -mimplicit-it=always -fomit-frame-pointer'
     gen_build_cmd = [musl_make_dir + '/configure', 
                      '--prefix=' + musl_install_dir,
                      '--disable-shared',
                      '--disable-wrapper',
                      '--disable-optimize',
                      '--enable-debug',
-                     '--target=arm-none-eabi']
+                     '--target=arm-none-eabi-musl']
     if is_windows():
         gen_build_cmd = ['sh.exe'] + gen_build_cmd
     run_subprocess(gen_build_cmd, 'Configure Musl', musl_build_dir, penv=musl_env)
