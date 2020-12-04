@@ -131,6 +131,7 @@ def run_subprocess(cmd_args, info_str, working_dir=None, penv=None, use_shell=Fa
     if info_str:
         print_line_with_info_str('', info_str)
 
+    output = ''
     prev_output = ''
     remaining_output = ''
     proc = subprocess.Popen(cmd_args, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=False, 
@@ -255,34 +256,32 @@ def get_mips_multilib_opts(multilib_path):
     # This option prevents libraries from putting small globals into the small data sections. This
     # is the safest option since an application can control the size threshold with '-G<size>'.
     opts.append('-G0')
+# TODO: Should '-fomit-frame-pointer' be used here? Is there any harm in it (like when linking with code that doesn't use it)?
 
     return opts
 
 # Notes:
 # -- The M0, M0+, M23, and M3 do not have an FPU.
-# -- The M4 has a 32-bit FPU; the M7 has a 64-bit FPU. These are Arm-v7em.
-# -- The A5 can have either a normal 64-bit FPU or one with NEON. This is ARm-v7a.
+# -- The M4 has a 32-bit FPU; the M7 has a 64-bit FPU. These are Armv7em.
+# -- The A5 can have either a normal 64-bit FPU or one with NEON. This is Armv7a.
 # -- The M series is always Thumb, so we do not have to differentiate.
-CORTEX_M_MULTLIB_PREFIX = PurePosixPath('target', 'cortex-m', 'lib')
-CORTEX_M_MULTILIBS = [PurePosixPath('v6m'),
-                      PurePosixPath('v7m'),
-                      PurePosixPath('v7em'),
-                      PurePosixPath('v7em', 'vfp4-sp-d16'),
-                      PurePosixPath('v7em', 'vfp5-dp-d16'),
-                      PurePosixPath('v8m.base'),
-#                      PurePosixPath('v8m.main'),
-#                      PurePosixPath('v8m.main', 'vfp5-sp-d16'),
-#                      PurePosixPath('v8.1m.main'),
-#                      PurePosixPath('v8.1m.main', 'fp-armv8-fullfp16-d16')
-                      ]
-
-CORTEX_A_MULTILIB_PREIX = PurePosixPath('target', 'cortex-a', 'lib')
-CORTEX_A_MULTILIBS = [PurePosixPath('v7a'),
-                      PurePosixPath('v7a', 'vfp4-dp-d16'),
-                      PurePosixPath('v7a', 'neon-vfpv4'),
-                      PurePosixPath('v7a', 'thumb'),
-                      PurePosixPath('v7a', 'thumb', 'vfp4-dp-d16'),
-                      PurePosixPath('v7a', 'thumb', 'neon-vfpv4')]
+ARM_MULTLIB_PREFIX = PurePosixPath('target', 'cortex-m', 'lib')
+ARM_MULTILIBS = [PurePosixPath('v6m'),
+                 PurePosixPath('v7m'),
+                 PurePosixPath('v7em'),
+                 PurePosixPath('v7em', 'vfp4-sp-d16'),
+                 PurePosixPath('v7em', 'vfp5-dp-d16'),
+                 PurePosixPath('v8m.base'),
+#                 PurePosixPath('v8m.main'),
+#                 PurePosixPath('v8m.main', 'vfp5-sp-d16'),
+#                 PurePosixPath('v8.1m.main'),
+#                 PurePosixPath('v8.1m.main', 'fp-armv8-fullfp16-d16')
+                 PurePosixPath('v7a'),
+                 PurePosixPath('v7a', 'vfp4-dp-d16'),
+                 PurePosixPath('v7a', 'neon-vfpv4'),
+                 PurePosixPath('v7a', 'thumb'),
+                 PurePosixPath('v7a', 'thumb', 'vfp4-dp-d16'),
+                 PurePosixPath('v7a', 'thumb', 'neon-vfpv4')]
 
 def get_arm_multilib_opts(multilib_path):
     '''Return a string array containing compiler options for an Arm device based on the given
@@ -304,7 +303,10 @@ def get_arm_multilib_opts(multilib_path):
     elif 'v8m.main' in multilib_path.parts:
         opts.append('-march=armv8m.main')
     elif 'v8.1m.main' in multilib_path.parts:
-        opts.append('-march=armv8.1m.main')
+        if 'fp-armv8-fullfp16-d16' in multilib_path.parts:
+            opts.append('-march=armv8.1m.main+mve.fp+fp.dp')
+        else:
+            opts.append('-march=armv8.1m.main')
 
     # Compressed instruction set
     if 'thumb' in multilib_path.parts:
@@ -336,6 +338,7 @@ def get_arm_multilib_opts(multilib_path):
         opts.append('-msoft-float')
         opts.append('-mfloat-abi=soft')
 
+# TODO: Should '-fomit-frame-pointer' be used here? Is there any harm in it (like when linking with code that doesn't use it)?
     return opts
 
 
@@ -459,14 +462,14 @@ def build_musl():
     # --The configure script just generates a config.mak file in the build directory. It might be easier
     #   to either just generate that here or add all of those value to the environment. This would mean
     #   not having to run the script on Windows, but it does mean we may fall behind script updates.
-    # --For Armv7(E)-M, Clang defines both __thumb__ and __thumb2__.
+    # --For Armv7(E)-M and Armv8M/8.1M Mainline, Clang defines both __thumb__ and __thumb2__.
     # --For Armv6-M and Armv8-M.base, only __thumb__ is defined.
 
     musl_env = os.environ.copy()
     musl_env['AR'] = llvm_ar_path
     musl_env['RANLIB'] = llvm_ar_path + ' -s'
     musl_env['CC'] = clang_c_path
-    musl_env['CFLAGS'] = '--target=arm-none-eabi-musl -march=armv8m.base -msoft-float -mfloat-abi=soft -mimplicit-it=always -fomit-frame-pointer'
+    musl_env['CFLAGS'] = '--target=arm-none-eabi-musl -march=armv7em -msoft-float -mfloat-abi=soft -mimplicit-it=always -fomit-frame-pointer'
     gen_build_cmd = [musl_make_dir + '/configure', 
                      '--prefix=' + musl_install_dir,
                      '--disable-shared',
