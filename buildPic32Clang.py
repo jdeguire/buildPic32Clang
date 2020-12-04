@@ -265,7 +265,7 @@ def get_mips_multilib_opts(multilib_path):
 # -- The M4 has a 32-bit FPU; the M7 has a 64-bit FPU. These are Armv7em.
 # -- The A5 can have either a normal 64-bit FPU or one with NEON. This is Armv7a.
 # -- The M series is always Thumb, so we do not have to differentiate.
-ARM_MULTLIB_PREFIX = PurePosixPath('target', 'cortex-m', 'lib')
+ARM_MULTLIB_PREFIX = PurePosixPath('target', 'arm', 'lib')
 ARM_MULTILIBS = [PurePosixPath('v6m'),
                  PurePosixPath('v7m'),
                  PurePosixPath('v7em'),
