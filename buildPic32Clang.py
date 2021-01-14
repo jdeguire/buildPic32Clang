@@ -66,7 +66,7 @@ BUILD_PREFIX = ROOT_WORKING_DIR / 'build'
 INSTALL_PREFIX = ROOT_WORKING_DIR / 'install'
 
 LLVM_REPO_URL = 'https://github.com/llvm/llvm-project.git'
-LLVM_RELEASE_BRANCH = 'llvmorg-11.0.0'
+LLVM_RELEASE_BRANCH = 'llvmorg-11.0.1'
 LLVM_WORKING_DIR = ROOT_WORKING_DIR / 'llvm'
 
 # Use a GitHub mirror for now since it can probably handle repeated clones I'll do while testing
