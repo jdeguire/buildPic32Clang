@@ -141,7 +141,7 @@ def run_subprocess(cmd_args, info_str, working_dir=None, penv=None, use_shell=Fa
         while True:
             # We need a number here or else this will block.  On Unix, we can use os.set_blocking()
             # to disable this, but not on Windows.
-            output = proc.stdout.read(256).decode('utf-8', 'backslashreplace')
+            output = proc.stdout.read(2048).decode('utf-8', 'backslashreplace')
             if not output:
                 break
 
@@ -448,9 +448,9 @@ def build_musl():
 
     os.makedirs(musl_build_dir)
 
-    #num_cpus = os.cpu_count()
-    #if None == num_cpus or num_cpus < 1:
-    #    num_cpus = 1
+#    num_cpus = os.cpu_count()
+#    if None == num_cpus or num_cpus < 1:
+#        num_cpus = 1
     num_cpus = 1
 
     #####
@@ -465,27 +465,67 @@ def build_musl():
     # --For Armv7(E)-M and Armv8M/8.1M Mainline, Clang defines both __thumb__ and __thumb2__.
     # --For Armv6-M and Armv8-M.base, only __thumb__ is defined.
 
+    #####
+    # Temporary stuff for building Musl on Arm
+    #
+
+    # So I can build Musl with a few ARM arches in one run...
+#    arm_arches = ['armv6', 'armv6m', 'armv7m', 'armv7a', 'armv8m.base']
+#    arm_arches = ['armv8m.base']
+    arm_arches = []
+
     musl_env = os.environ.copy()
     musl_env['AR'] = llvm_ar_path
     musl_env['RANLIB'] = llvm_ar_path + ' -s'
     musl_env['CC'] = clang_c_path
-    musl_env['CFLAGS'] = '--target=arm-none-eabi-musl -march=armv7em -msoft-float -mfloat-abi=soft -mimplicit-it=always -fomit-frame-pointer'
+
+    for a in arm_arches:
+        musl_env['CFLAGS'] = '--target=arm-none-eabi-musl -march=' + a + ' -msoft-float -mfloat-abi=soft -mimplicit-it=always -fomit-frame-pointer -Werror'
+        gen_build_cmd = [musl_make_dir + '/configure', 
+                         '--prefix=' + musl_install_dir,
+                         '--disable-shared',
+                         '--disable-wrapper',
+                         '--disable-optimize',
+                         '--enable-debug',
+                         '--target=arm-none-eabi-musl']
+#    if is_windows():
+#        gen_build_cmd = ['sh.exe'] + gen_build_cmd
+        run_subprocess(gen_build_cmd, 'Configure Musl', musl_build_dir, penv=musl_env)
+
+        build_musl_cmd = ['make', 'clean']
+        run_subprocess(build_musl_cmd, 'Clean Musl', musl_build_dir, penv=musl_env)
+
+        build_musl_cmd = ['make', '-j' + str(num_cpus)]
+        run_subprocess(build_musl_cmd, 'Build Musl', musl_build_dir, penv=musl_env)
+
+        install_musl_cmd = ['make', '-j' + str(num_cpus), 'install']
+        run_subprocess(install_musl_cmd, 'Install Musl', musl_build_dir, penv=musl_env)
+
+#    return
+
+    #####
+    # Temporary stuff for building Musl on Mips
+    #
+    musl_env['CFLAGS'] = '--target=mipsel-linux-gnu-musl -mips16 -march=mips32r2 -msoft-float -mfloat-abi=soft -fomit-frame-pointer -Werror'
     gen_build_cmd = [musl_make_dir + '/configure', 
                      '--prefix=' + musl_install_dir,
                      '--disable-shared',
                      '--disable-wrapper',
                      '--disable-optimize',
                      '--enable-debug',
-                     '--target=arm-none-eabi-musl']
-    if is_windows():
-        gen_build_cmd = ['sh.exe'] + gen_build_cmd
+                     '--target=mipsel-linux-gnu-musl']
+
     run_subprocess(gen_build_cmd, 'Configure Musl', musl_build_dir, penv=musl_env)
+
+    build_musl_cmd = ['make', 'clean']
+    run_subprocess(build_musl_cmd, 'Clean Musl', musl_build_dir, penv=musl_env)
 
     build_musl_cmd = ['make', '-j' + str(num_cpus)]
     run_subprocess(build_musl_cmd, 'Build Musl', musl_build_dir, penv=musl_env)
 
     install_musl_cmd = ['make', '-j' + str(num_cpus), 'install']
     run_subprocess(install_musl_cmd, 'Install Musl', musl_build_dir, penv=musl_env)
+
 
 def build_llvm_runtimes():
     '''Build LLVM runtime libraries for the targets.

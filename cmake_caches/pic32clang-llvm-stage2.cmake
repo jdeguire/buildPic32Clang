@@ -28,6 +28,7 @@ set(LLVM_TOOLCHAIN_TOOLS
   llvm-nm
   llvm-objdump
   llvm-ranlib
+  llvm-readelf
   llvm-readobj
   llvm-size
   llvm-symbolizer
