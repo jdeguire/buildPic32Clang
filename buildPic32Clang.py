@@ -69,11 +69,12 @@ LLVM_REPO_URL = 'https://github.com/llvm/llvm-project.git'
 LLVM_RELEASE_BRANCH = 'llvmorg-11.0.1'
 LLVM_WORKING_DIR = ROOT_WORKING_DIR / 'llvm'
 
-# Use a GitHub mirror for now since it can probably handle repeated clones I'll do while testing
-# this better than a personal site.
+# Use my clone of Musl for now because it will contain mods to get it to work
+# on our PIC32 and SAM devices.
 #MUSL_REPO_URL = 'https://git.musl-libc.org/cgit/musl.git'
-MUSL_REPO_URL = 'https://github.com/bminor/musl.git'
-MUSL_RELEASE_BRANCH = 'v1.2.1'
+MUSL_REPO_URL = 'https://github.com/jdeguire/pic32Musl.git'
+#MUSL_RELEASE_BRANCH = 'v1.2.1'
+MUSL_RELEASE_BRANCH = ''
 MUSL_WORKING_DIR = ROOT_WORKING_DIR / 'musl'
 
 CMAKE_CACHE_DIR = PurePosixPath(os.path.dirname(os.path.realpath(__file__)), 'cmake_caches')
@@ -93,10 +94,11 @@ def print_line_with_info_str(line, info_str):
     split_line = line.split('\n', 1)
     print(split_line[0], end='')
 
-    # '7m' enables inverted colors (reverse video)
-    # '27m' disabled inverted colors
-    # 'K' clears the rest of the line starting at the cursor
-    # 'A' moves up one line
+    # Control codes start with \x1b (ESC) and [
+    #   '7m' enables inverted colors (reverse video)
+    #   '27m' disabled inverted colors
+    #   'K' clears the rest of the line starting at the cursor
+    #   'A' moves up one line
     print('\n\x1b[K\x1b[A', end='')
     if len(split_line) > 1:
         print('\n' + split_line[1], end='')
@@ -618,8 +620,8 @@ if '__main__' == __name__:
     clone_from_git(LLVM_REPO_URL, LLVM_RELEASE_BRANCH, LLVM_WORKING_DIR, skip_if_exists=True)
     clone_from_git(MUSL_REPO_URL, MUSL_RELEASE_BRANCH, MUSL_WORKING_DIR, skip_if_exists=True)
 
-    print("\n*****\nBUILD LLVM COMMENTED OUT\n*****\n")
-    #build_llvm()
+    #print("\n*****\nBUILD LLVM COMMENTED OUT\n*****\n")
+    build_llvm()
 
     #print("\n*****\nBUILD MUSL COMMENTED OUT\n*****\n")
     build_musl()
