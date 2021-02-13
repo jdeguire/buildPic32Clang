@@ -161,7 +161,8 @@ def run_subprocess(cmd_args, info_str, working_dir=None, penv=None, use_shell=Fa
         time.sleep(0.001)
 
     # Get any straggling lines after the process has ended
-    remaining_output += proc.stdout.read().decode('utf-8', 'backslashreplace')
+    #remaining_output += proc.stdout.read().decode('utf-8', 'backslashreplace')
+    remaining_output += proc.communicate()[0].decode('utf-8', 'backslashreplace')
 
     if remaining_output:
         print_line_with_info_str(remaining_output, info_str)
@@ -215,9 +216,10 @@ def clone_from_git(url, branch=None, dest_directory=None, skip_if_exists=False):
 # -- The previous note implies that all MIPS32r5 devices have the DSPr2 extension.
 # -- Only the PIC32MX series uses the older MIPS16 extension; none of them have an FPU or DSP ASE.
 # -- It's not clear if Clang/LLVM cares about r2 vs r5 (it might only care about r6 vs rest).
+# -- MIPS16 is commented out for now because Clang/LLVM can crash when trying to use it.
 MIPS32_MULTILIB_PREFIX = PurePosixPath('target', 'mips32', 'lib')
 MIPS32_MULTILIBS = [PurePosixPath('r2'),
-                    PurePosixPath('r2', 'mips16'),
+#                    PurePosixPath('r2', 'mips16'),
                     PurePosixPath('r2', 'micromips'),
                     PurePosixPath('r2', 'micromips', 'dspr2'), 
                     PurePosixPath('r2', 'dspr2'),
@@ -232,33 +234,34 @@ def get_mips_multilib_opts(multilib_path):
     '''
     opts = ['-target', 'mipsel-linux-gnu-musl']
 
-    # MIPS32 architecture revision
-    if 'r5' in multilib_path.parts:
-        opts.append('-march=mips32r5')
-    else:
-        opts.append('-march=mips32r2')
+    for part in multilib_path.parts:
+        # MIPS32 architecture revision
+        if 'r5' in part:
+            opts.append('-march=mips32r5')
+        else:
+            opts.append('-march=mips32r2')
 
-    # Compressed instruction set support
-    if 'mips16' in multilib_path.parts:
-        opts.append('-mips16')
-    if 'micromips' in multilib_path.parts:
-        opts.append('-mmicromips')
+        # Compressed instruction set support
+        if 'mips16' in part:
+            opts.append('-mips16')
+        if 'micromips' in part:
+            opts.append('-mmicromips')
 
-    # Application-specific Extensions (ASEs); only DSPr2 at this time.
-    if 'dspr2' in multilib_path.parts:
-        opts.append('-mdspr2')
+        # Application-specific Extensions (ASEs); only DSPr2 at this time.
+        if 'dspr2' in part:
+            opts.append('-mdspr2')
 
-    # FPU
-    if 'fpu64' in multilib_path.parts:
-        opts.append('-mhard-float')
-        opts.append('-mfp64')
-    else:
-        opts.append('-msoft-float')
+        # FPU
+        if 'fpu64' in part:
+            opts.append('-mhard-float')
+            opts.append('-mfp64')
+        else:
+            opts.append('-msoft-float')
 
     # This option prevents libraries from putting small globals into the small data sections. This
     # is the safest option since an application can control the size threshold with '-G<size>'.
     opts.append('-G0')
-# TODO: Should '-fomit-frame-pointer' be used here? Is there any harm in it (like when linking with code that doesn't use it)?
+    opts.append('-fomit-frame-pointer')
 
     return opts
 
@@ -291,56 +294,58 @@ def get_arm_multilib_opts(multilib_path):
     '''
     opts = ['-target', 'arm-none-eabi-musl']
 
-    # Architecture name
-    if 'v6m' in multilib_path.parts:
-        opts.append('-march=armv6m')
-    elif 'v7m' in multilib_path.parts:
-        opts.append('-march=armv7m')
-    elif 'v7em' in multilib_path.parts:
-        opts.append('-march=armv7em')
-    elif 'v7a' in multilib_path.parts:
-        opts.append('-march=armv7a')
-    elif 'v8m.base' in multilib_path.parts:
-        opts.append('-march=armv8m.base')
-    elif 'v8m.main' in multilib_path.parts:
-        opts.append('-march=armv8m.main')
-    elif 'v8.1m.main' in multilib_path.parts:
-        if 'fp-armv8-fullfp16-d16' in multilib_path.parts:
-            opts.append('-march=armv8.1m.main+mve.fp+fp.dp')
+    for part in multilib_path.parts:
+        # Architecture name
+        if 'v6m' in part:
+            opts.append('-march=armv6m')
+        elif 'v7m' in part:
+            opts.append('-march=armv7m')
+        elif 'v7em' in part:
+            opts.append('-march=armv7em')
+        elif 'v7a' in part:
+            opts.append('-march=armv7a')
+        elif 'v8m.base' in part:
+            opts.append('-march=armv8m.base')
+        elif 'v8m.main' in part:
+            opts.append('-march=armv8m.main')
+        elif 'v8.1m.main' in part:
+            if 'fp-armv8-fullfp16-d16' in multilib_path.parts:
+                opts.append('-march=armv8.1m.main+mve.fp+fp.dp')
+            else:
+                opts.append('-march=armv8.1m.main')
+
+        # Compressed instruction set
+        if 'thumb' in part:
+            opts.append('-mthumb')
+
+        # FPU name
+        if 'vfp4-sp-d16' in part:
+            opts.append('-mfpu=vfp4-sp-d16')
+            opts.append('-mfloat-abi=hard')
+        elif 'vfp4-dp-d16' in part:
+            opts.append('-mfpu=vfp4-dp-d16')
+            opts.append('-mfloat-abi=hard')
+        elif 'vfp5-sp-d16' in part:
+            opts.append('-mfpu=vfp5-sp-d16')
+            opts.append('-mfloat-abi=hard')
+        elif 'vfp5-dp-d16' in part:
+            opts.append('-mfpu=vfp5-dp-d16')
+            opts.append('-mfloat-abi=hard')
+        elif 'fp-armv8' in part:
+            opts.append('-mfpu=fp-armv8')
+            opts.append('-mfloat-abi=hard')
+        elif 'fp-armv8-fullfp16-d16' in part:
+            opts.append('-mfpu=fp-armv8-fullfp16-d16')
+            opts.append('-mfloat-abi=hard')
+        elif 'neon-vfpv4' in part:
+            opts.append('-mfpu=neon-vfpv4')
+            opts.append('-mfloat-abi=hard')
         else:
-            opts.append('-march=armv8.1m.main')
+            opts.append('-msoft-float')
+            opts.append('-mfloat-abi=soft')
 
-    # Compressed instruction set
-    if 'thumb' in multilib_path.parts:
-        opts.append('-mthumb')
+    opts.append('-fomit-frame-pointer')
 
-    # FPU name
-    if 'vfp4-sp-d16' in multilib_path.parts:
-        opts.append('-mfpu=vfp4-sp-d16')
-        opts.append('-mfloat-abi=hard')
-    elif 'vfp4-dp-d16' in multilib_path.parts:
-        opts.append('-mfpu=vfp4-dp-d16')
-        opts.append('-mfloat-abi=hard')
-    elif 'vfp5-sp-d16' in multilib_path.parts:
-        opts.append('-mfpu=vfp5-sp-d16')
-        opts.append('-mfloat-abi=hard')
-    elif 'vfp5-dp-d16' in multilib_path.parts:
-        opts.append('-mfpu=vfp5-dp-d16')
-        opts.append('-mfloat-abi=hard')
-    elif 'fp-armv8' in multilib_path.parts:
-        opts.append('-mfpu=fp-armv8')
-        opts.append('-mfloat-abi=hard')
-    elif 'fp-armv8-fullfp16-d16' in multilib_path.parts:
-        opts.append('-mfpu=fp-armv8-fullfp16-d16')
-        opts.append('-mfloat-abi=hard')
-    elif 'neon-vfpv4' in multilib_path.parts:
-        opts.append('-mfpu=neon-vfpv4')
-        opts.append('-mfloat-abi=hard')
-    else:
-        opts.append('-msoft-float')
-        opts.append('-mfloat-abi=soft')
-
-# TODO: Should '-fomit-frame-pointer' be used here? Is there any harm in it (like when linking with code that doesn't use it)?
     return opts
 
 
@@ -349,7 +354,6 @@ OPTIMIZATION_MULTILIBS = [PurePosixPath('.'),
                           PurePosixPath('o2'),
                           PurePosixPath('o3'),
                           PurePosixPath('os'),
-                          PurePosixPath('ofast'),
                           PurePosixPath('oz')]
 
 def get_optimization_multilib_opts(multilib_path):
@@ -358,21 +362,24 @@ def get_optimization_multilib_opts(multilib_path):
     '''
     opts = []
 
-    # Optimization level
-    if 'o1' in multilib_path.parts:
-        opts.append('-O1')
-    elif 'o2' in multilib_path.parts:
-        opts.append('-O2')
-    elif 'o3' in multilib_path.parts:
-        opts.append('-O3')
-    elif 'os' in multilib_path.parts:
-        opts.append('-Os')
-    elif 'ofast' in multilib_path.parts:
-        opts.append('-Ofast')
-    elif 'oz' in multilib_path.parts:
-        opts.append('-Oz')
+    if multilib_path.parts:
+        for part in multilib_path.parts:
+            if 'o1' in part:
+                opts.append('-O1')
+            elif 'o2' in part:
+                opts.append('-O2')
+            elif 'o3' in part:
+                opts.append('-O3')
+            elif 'os' in part:
+                opts.append('-Os')
+            elif 'oz' in part:
+                opts.append('-Oz')
+            else:
+                opts.append('-O0')
     else:
         opts.append('-O0')
+
+    return opts
 
 
 def build_llvm():
@@ -392,8 +399,6 @@ def build_llvm():
 
     os.makedirs(llvm_build_dir)
 
-    #llvm_targets = ['ARM', 'Mips']
-
     ######
     # The CMake cache files used here are based on the example configs found in
     # llvm/clang/cmake/caches that build a 2-stage distribution of LLVM/Clang. The 'stage1' cache
@@ -404,20 +409,6 @@ def build_llvm():
     # NOTE: By default, the CMake cache files build the stage2 compiler with LTO. This takes forever
     # and is not important for testing, so the below command disables it for now.
     #
-    #llvm_projects = ['clang', 'clang-tools-extra', 'debuginfo-tests', 'lld', 'lldb', 'mlir', 'polly']
-
-    #gen_build_cmd = ['cmake', '-G', 'Ninja', 
-    #                 '-DCMAKE_BUILD_TYPE=Release',
-    #                 '-DCMAKE_INSTALL_PREFIX=' + llvm_install_dir,
-    #                 '-DLLVM_TARGETS_TO_BUILD=' + ';'.join(llvm_targets),
-    #                 '-DLLVM_ENABLE_PROJECTS=' + ';'.join(llvm_projects),
-    #                 '-DLLVM_ENABLE_RUNTIMES=' + ';'.join(llvm_runtimes),
-    #                 '-DCLANG_DEFAULT_LINKER=lld',
-    #                 '-DCLANG_DEFAULT_CXX_STDLIB=libc++',
-    #                 '-DCLANG_DEFAULT_RTLIB=compiler-rt',
-    #                 '-DCLANG_DEFAULT_UNWINDLIB=libunwind',
-    #                 '-DCLANG_DEFAULT_OBJCOPY=llvm-objcopy',
-    #                 llvm_make_dir]
     gen_build_cmd = ['cmake', '-G', 'Ninja',
                      '-DCMAKE_INSTALL_PREFIX=' + llvm_install_dir,
                      '-DBOOTSTRAP_LLVM_ENABLE_LTO=OFF',
@@ -450,10 +441,10 @@ def build_musl():
 
     os.makedirs(musl_build_dir)
 
-#    num_cpus = os.cpu_count()
-#    if None == num_cpus or num_cpus < 1:
-#        num_cpus = 1
-    num_cpus = 1
+    num_cpus = os.cpu_count()
+    if None == num_cpus or num_cpus < 1:
+        num_cpus = 1
+#    num_cpus = 1
 
     #####
     # Notes:
@@ -467,6 +458,77 @@ def build_musl():
     # --For Armv7(E)-M and Armv8M/8.1M Mainline, Clang defines both __thumb__ and __thumb2__.
     # --For Armv6-M and Armv8-M.base, only __thumb__ is defined.
 
+    musl_env = os.environ.copy()
+    musl_env['AR'] = llvm_ar_path
+    musl_env['RANLIB'] = llvm_ar_path + ' -s'
+    musl_env['CC'] = clang_c_path
+
+    for mips_ml in MIPS32_MULTILIBS:
+        multilib_opts = ' '.join(get_mips_multilib_opts(mips_ml))
+
+        for opt_ml in OPTIMIZATION_MULTILIBS:
+            multilib_str = str('mips32' / mips_ml / opt_ml)
+            prefix_str = str(PurePosixPath(musl_install_dir, multilib_str))
+            optimization_opts = ' '.join(get_optimization_multilib_opts(opt_ml))
+
+            musl_env['CFLAGS'] = multilib_opts + ' ' + optimization_opts
+
+            gen_build_cmd = [musl_make_dir + '/configure', 
+                            '--prefix=' + prefix_str,
+                            '--disable-shared',
+                            '--disable-wrapper',
+                            '--disable-optimize',
+                            '--enable-debug',
+                            '--target=mipsel-linux-gnu-musl']
+            gen_build_info = 'Configure Musl (' + multilib_str + ')'
+            run_subprocess(gen_build_cmd, gen_build_info, musl_build_dir, penv=musl_env)
+
+            clean_musl_cmd = ['make', 'clean']
+            clean_musl_info = 'Clean Musl (' + multilib_str + ')'
+            run_subprocess(clean_musl_cmd, clean_musl_info, musl_build_dir, penv=musl_env)
+
+            build_musl_cmd = ['make', '-j' + str(num_cpus)]
+            build_musl_info = 'Build Musl (' + multilib_str + ')'
+            run_subprocess(build_musl_cmd, build_musl_info, musl_build_dir, penv=musl_env)
+
+            install_musl_cmd = ['make', '-j1', 'install']
+            install_musl_info = 'Install Musl (' + multilib_str + ')'
+            run_subprocess(install_musl_cmd, install_musl_info, musl_build_dir, penv=musl_env)
+        
+    for arm_ml in ARM_MULTILIBS:
+        multilib_opts = ' '.join(get_arm_multilib_opts(arm_ml))
+
+        for opt_ml in OPTIMIZATION_MULTILIBS:
+            multilib_str = str('arm' / arm_ml / opt_ml)
+            prefix_str = str(PurePosixPath(musl_install_dir, multilib_str))
+            optimization_opts = ' '.join(get_optimization_multilib_opts(opt_ml))
+
+            musl_env['CFLAGS'] = multilib_opts + ' ' + optimization_opts
+
+            gen_build_cmd = [musl_make_dir + '/configure', 
+                            '--prefix=' + prefix_str,
+                            '--disable-shared',
+                            '--disable-wrapper',
+                            '--disable-optimize',
+                            '--enable-debug',
+                            '--target=arm-none-eabi-musl']
+            gen_build_info = 'Configure Musl (' + multilib_str + ')'
+            run_subprocess(gen_build_cmd, gen_build_info, musl_build_dir, penv=musl_env)
+
+            clean_musl_cmd = ['make', 'clean']
+            clean_musl_info = 'Clean Musl (' + multilib_str + ')'
+            run_subprocess(clean_musl_cmd, clean_musl_info, musl_build_dir, penv=musl_env)
+
+            build_musl_cmd = ['make', '-j' + str(num_cpus)]
+            build_musl_info = 'Build Musl (' + multilib_str + ')'
+            run_subprocess(build_musl_cmd, build_musl_info, musl_build_dir, penv=musl_env)
+
+            install_musl_cmd = ['make', '-j1', 'install']
+            install_musl_info = 'Install Musl (' + multilib_str + ')'
+            run_subprocess(install_musl_cmd, install_musl_info, musl_build_dir, penv=musl_env)
+
+    return
+
     #####
     # Temporary stuff for building Musl on Arm
     #
@@ -476,13 +538,8 @@ def build_musl():
 #    arm_arches = ['armv8m.base']
     arm_arches = []
 
-    musl_env = os.environ.copy()
-    musl_env['AR'] = llvm_ar_path
-    musl_env['RANLIB'] = llvm_ar_path + ' -s'
-    musl_env['CC'] = clang_c_path
-
     for a in arm_arches:
-        musl_env['CFLAGS'] = '--target=arm-none-eabi-musl -march=' + a + ' -msoft-float -mfloat-abi=soft -mimplicit-it=always -fomit-frame-pointer -Werror'
+        musl_env['CFLAGS'] = '-target arm-none-eabi-musl -march=' + a + ' -msoft-float -mfloat-abi=soft -mimplicit-it=always -fomit-frame-pointer'
         gen_build_cmd = [musl_make_dir + '/configure', 
                          '--prefix=' + musl_install_dir,
                          '--disable-shared',
@@ -508,7 +565,7 @@ def build_musl():
     #####
     # Temporary stuff for building Musl on Mips
     #
-    musl_env['CFLAGS'] = '--target=mipsel-linux-gnu-musl -mips16 -march=mips32r2 -msoft-float -mfloat-abi=soft -fomit-frame-pointer -Werror'
+    musl_env['CFLAGS'] = '-target mipsel-linux-gnu-musl -march=mips32r2 -mips16 -msoft-float -mfloat-abi=soft -fomit-frame-pointer'
     gen_build_cmd = [musl_make_dir + '/configure', 
                      '--prefix=' + musl_install_dir,
                      '--disable-shared',
@@ -620,8 +677,8 @@ if '__main__' == __name__:
     clone_from_git(LLVM_REPO_URL, LLVM_RELEASE_BRANCH, LLVM_WORKING_DIR, skip_if_exists=True)
     clone_from_git(MUSL_REPO_URL, MUSL_RELEASE_BRANCH, MUSL_WORKING_DIR, skip_if_exists=True)
 
-    #print("\n*****\nBUILD LLVM COMMENTED OUT\n*****\n")
-    build_llvm()
+    print("\n*****\nBUILD LLVM COMMENTED OUT\n*****\n")
+    #build_llvm()
 
     #print("\n*****\nBUILD MUSL COMMENTED OUT\n*****\n")
     build_musl()

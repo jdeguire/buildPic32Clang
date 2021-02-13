@@ -7,19 +7,23 @@
 # adding extra tools not in the original file.
 
 
-set(LLVM_ENABLE_PROJECTS "clang;clang-tools-extra;lld;polly" CACHE STRING "")
+set(LLVM_ENABLE_PROJECTS "clang;clang-tools-extra;lld;lldb;polly" CACHE STRING "")
 set(LLVM_ENABLE_RUNTIMES "compiler-rt;libcxx;libcxxabi" CACHE STRING "")
 
 set(LLVM_TARGETS_TO_BUILD X86;ARM;Mips CACHE STRING "")
 
-set(CMAKE_BUILD_TYPE RelWithDebInfo CACHE STRING "")
+#set(CMAKE_BUILD_TYPE RelWithDebInfo CACHE STRING "")
+set(CMAKE_BUILD_TYPE Debug CACHE STRING "")
 set(CMAKE_C_FLAGS_RELWITHDEBINFO "-O3 -gline-tables-only -DNDEBUG" CACHE STRING "")
 set(CMAKE_CXX_FLAGS_RELWITHDEBINFO "-O3 -gline-tables-only -DNDEBUG" CACHE STRING "")
+set(CMAKE_C_FLAGS_DEBUG "-g" CACHE STRING "")
+set(CMAKE_CXX_FLAGS_DEBUG "-g" CACHE STRING "")
 
 # setup toolchain
 # these are names of subdirectories under "llvm/llvm/tools"
 set(LLVM_INSTALL_TOOLCHAIN_ONLY ON CACHE BOOL "")
 set(LLVM_TOOLCHAIN_TOOLS
+  bugpoint
   dsymutil
   llc
   llvm-ar
@@ -33,6 +37,7 @@ set(LLVM_TOOLCHAIN_TOOLS
   llvm-size
   llvm-symbolizer
   llvm-lto
+  llvm-lto2
   llvm-cov
   llvm-objcopy
   llvm-profdata
