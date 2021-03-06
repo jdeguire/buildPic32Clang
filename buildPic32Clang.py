@@ -86,6 +86,7 @@ def is_windows():
     '''
     return 'nt' == os.name
 
+
 def print_line_with_info_str(line, info_str):
     '''Print the given line while also using ANSI control codes to print the given info string in 
     inverted colors below it. The cursor will be on a new line when this is done.
@@ -265,6 +266,7 @@ def get_mips_multilib_opts(multilib_path):
 
     return opts
 
+
 # Notes:
 # -- The M0, M0+, M23, and M3 do not have an FPU.
 # -- The M4 has a 32-bit FPU; the M7 has a 64-bit FPU. These are Armv7em.
@@ -386,7 +388,7 @@ def build_llvm():
     '''
     llvm_build_dir = BUILD_PREFIX / 'llvm'
     llvm_install_dir = os.path.relpath(INSTALL_PREFIX, llvm_build_dir)
-    llvm_make_dir = os.path.relpath(LLVM_WORKING_DIR / 'llvm', llvm_build_dir)
+    llvm_src_dir = os.path.relpath(LLVM_WORKING_DIR / 'llvm', llvm_build_dir)
     llvm_cmake_config_path = os.path.relpath(CMAKE_CACHE_DIR / 'pic32clang-llvm-stage1.cmake',
                                              llvm_build_dir)
 
@@ -405,18 +407,21 @@ def build_llvm():
     # NOTE: By default, the CMake cache files build the stage2 compiler with LTO. This takes forever
     # and is not important for testing, so the below command disables it for now.
     #
+    # TODO: Can the DEFAULT_SYSROOT option be set such that it is always relative to the executables?
+    #       It looks like setting it to ".." might make it relative to where the "bin/" directory is.
     gen_build_cmd = ['cmake', '-G', 'Ninja',
                      '-DCMAKE_INSTALL_PREFIX=' + llvm_install_dir,
                      '-DBOOTSTRAP_LLVM_ENABLE_LTO=OFF',
                      '-C', llvm_cmake_config_path,
-                     llvm_make_dir]
-    run_subprocess(gen_build_cmd, 'Generate LLVM build scripts', llvm_build_dir)
+                     llvm_src_dir]
+    run_subprocess(gen_build_cmd, 'Generate LLVM build script', llvm_build_dir)
 
     build_llvm_cmd = ['cmake', '--build', '.', '--target', 'stage2-distribution']
     run_subprocess(build_llvm_cmd, 'Build LLVM', llvm_build_dir)
 
     install_llvm_cmd = ['cmake', '--build', '.', '--target', 'stage2-install-distribution']
     run_subprocess(install_llvm_cmd, 'Install LLVM', llvm_build_dir)
+
 
 def build_musl():
     '''Build the Musl C library for the targets.
@@ -427,10 +432,11 @@ def build_musl():
     '''
     musl_build_dir = BUILD_PREFIX / 'musl'
     musl_install_dir = os.path.relpath(INSTALL_PREFIX / 'musl', musl_build_dir)
-    musl_make_dir = os.path.relpath(MUSL_WORKING_DIR, musl_build_dir)
+    musl_src_dir = os.path.relpath(MUSL_WORKING_DIR, musl_build_dir)
 
     clang_c_path = os.path.abspath(INSTALL_PREFIX / 'bin' / 'clang')
     llvm_ar_path = os.path.abspath(INSTALL_PREFIX / 'bin' / 'llvm-ar')
+    llvm_ranlib_path = os.path.abspath(INSTALL_PREFIX / 'bin' / 'llvm-ranlib')
 
     if os.path.exists(musl_build_dir):
         shutil.rmtree(musl_build_dir)
@@ -456,7 +462,7 @@ def build_musl():
 
     musl_env = os.environ.copy()
     musl_env['AR'] = llvm_ar_path
-    musl_env['RANLIB'] = llvm_ar_path + ' -s'
+    musl_env['RANLIB'] = llvm_ranlib_path
     musl_env['CC'] = clang_c_path
 
     for mips_ml in MIPS32_MULTILIBS:
@@ -471,7 +477,7 @@ def build_musl():
 
 # TODO: This needs to specify the '--includedir' and '--libdir' options (and maybe others, check Configure)
 #       to put files where we really want them.
-            gen_build_cmd = [musl_make_dir + '/configure', 
+            gen_build_cmd = [musl_src_dir + '/configure', 
                             '--prefix=' + prefix_str,
                             '--disable-shared',
                             '--disable-wrapper',
@@ -489,7 +495,7 @@ def build_musl():
             build_musl_info = 'Build Musl (' + multilib_str + ')'
             run_subprocess(build_musl_cmd, build_musl_info, musl_build_dir, penv=musl_env)
 
-            install_musl_cmd = ['make', '-j' + str(num_cpus), 'install']
+            install_musl_cmd = ['make', '-j1', 'install']
             install_musl_info = 'Install Musl (' + multilib_str + ')'
             run_subprocess(install_musl_cmd, install_musl_info, musl_build_dir, penv=musl_env)
         
@@ -503,7 +509,7 @@ def build_musl():
 
             musl_env['CFLAGS'] = multilib_opts + ' ' + optimization_opts
 
-            gen_build_cmd = [musl_make_dir + '/configure', 
+            gen_build_cmd = [musl_src_dir + '/configure', 
                             '--prefix=' + prefix_str,
                             '--disable-shared',
                             '--disable-wrapper',
@@ -521,9 +527,10 @@ def build_musl():
             build_musl_info = 'Build Musl (' + multilib_str + ')'
             run_subprocess(build_musl_cmd, build_musl_info, musl_build_dir, penv=musl_env)
 
-            install_musl_cmd = ['make', '-j' + str(num_cpus), 'install']
+            install_musl_cmd = ['make', '-j1', 'install']
             install_musl_info = 'Install Musl (' + multilib_str + ')'
             run_subprocess(install_musl_cmd, install_musl_info, musl_build_dir, penv=musl_env)
+
 
 def build_llvm_runtimes():
     '''Build LLVM runtime libraries for the targets.
@@ -531,23 +538,34 @@ def build_llvm_runtimes():
     This needs to be called after LLVM itself has been built because this needs LLVM to build the
     target libraries.
     '''
-    rt_build_dir = BUILD_PREFIX / 'llvm_libs'
-    rt_install_dir = os.path.relpath(INSTALL_PREFIX / 'runtimes', rt_build_dir)
-    rt_make_dir = os.path.relpath(LLVM_WORKING_DIR / 'llvm', rt_build_dir)
-    rt_cmake_config_path = os.path.relpath(CMAKE_CACHE_DIR / 'pic32clang-llvm-runtimes.cmake',
-                                             rt_build_dir)
+    #rt_install_dir = os.path.relpath(INSTALL_PREFIX / 'runtimes', rt_build_dir)
+    #rt_src_dir = os.path.relpath(LLVM_WORKING_DIR / 'llvm', rt_build_dir)
     #rt_musl_include_path = os.path.relpath(MUSL_WORKING_DIR / 'include', rt_build_dir)
-    rt_musl_include_path = os.path.abspath(MUSL_WORKING_DIR / 'include')
+    #rt_musl_include_path = os.path.abspath(MUSL_WORKING_DIR / 'include')
+    musl_include_path = os.path.abspath(INSTALL_PREFIX / 'musl' / 'mips32' / 'r2' / 'include')
+    #runtimes_include_path = os.path.abspath(INSTALL_PREFIX / 'runtimes' / 'include')
+    cxx_include_path = os.path.abspath(INSTALL_PREFIX / 'runtimes' / 'include' / 'c++' / 'v1')
 
-    #clang_c_path = os.path.abspath(INSTALL_PREFIX / 'bin' / 'clang')
-    #clang_cxx_path = os.path.abspath(INSTALL_PREFIX / 'bin' / 'clang++')
-    #clang_lld_path = os.path.abspath(INSTALL_PREFIX / 'bin' / 'lld')
-    clang_sysroot = os.path.abspath(INSTALL_PREFIX)
+    compiler_prefix = BUILD_PREFIX / 'llvm' / 'tools' / 'clang' / 'stage2-bins'
+    #compiler_prefix = INSTALL_PREFIX
 
-    if os.path.exists(rt_build_dir):
-        shutil.rmtree(rt_build_dir)
+    clang_sysroot = os.path.abspath(compiler_prefix)
+    clang_c_path = os.path.abspath(compiler_prefix / 'bin' / 'clang')
+    clang_cxx_path = os.path.abspath(compiler_prefix / 'bin' / 'clang++')
+    llvm_ar_path = os.path.abspath(compiler_prefix / 'bin' / 'llvm-ar')
+    llvm_nm_path = os.path.abspath(compiler_prefix / 'bin' / 'llvm-nm')
+    llvm_ranlib_path = os.path.abspath(compiler_prefix / 'bin' / 'llvm-ranlib')
 
-    os.makedirs(rt_build_dir)
+    # The order of these might matter, but I'm not certain.
+    # TODO: A comment in "llvm/llvm/runtimes/CMakeLists.txt:295" implies that the compiler-rt
+    #       builtins need to be built first before the other stuff can be built, so should this
+    #       build compiler-rt twice to get everything?
+    runtimes = [
+        'compiler-rt',
+        'libunwind',
+        'libcxx',
+        'libcxxabi'
+        ]
 
     ######
     # The CMake cache file used here are based on the example config found in
@@ -560,47 +578,145 @@ def build_llvm_runtimes():
     # build the libraries and runtimes.
     #
     #rt_projects = ['compiler-rt', 'libc', 'libclc', 'libcxx', 'libcxxabi', 'libunwind', 'openmp',
-    #                 'parallel-libs', 'pstl']
-    #make_flags = ['-v',
-    #              '--sysroot=' + clang_sysroot,
-    #              '-target mipsel-unknown-linux',
-    #              '-march=mips32r2',
-    #              '-msoft-float',
-    #              '-G0',
-    #              '-static']
+    #                'parallel-libs', 'pstl']
+    #rt_projects = ['compiler-rt', 'libcxx', 'libcxxabi', 'libunwind']
+    make_flags = [
+    #             '-v',
+                 '-target mipsel-linux-gnu-musl',
+                 '-march=mips32r2',
+                 '-msoft-float',
+                 '-G0',
+                 '-static',
+                 '-fomit-frame-pointer',
+                 '-isystem\'' + musl_include_path + '\'',
+    # Undefine these so that the output is the same regardless of build platform.
+    # Otherwise, libc++ will use platform-specific code based on which is defined.
+                 '-U__linux__',
+                 '-U__APPLE__',
+                 '-U_WIN32',
+    # These are defined if libc++ is configured to use Musl and __linux__ is defined.
+    # Define them manually so that they work the same regardless of build platform.
+                 '-D_LIBCPP_HAS_ALIGNED_ALLOC',
+                 '-D_LIBCPP_HAS_QUICK_EXIT',
+                 '-D_LIBCPP_HAS_TIMESPEC_GET',
+                 '-D_LIBCPP_HAS_C11_FEATURES'
+                 ]
 
-    #gen_build_cmd = ['cmake', '-G', 'Ninja', 
-    #                 '-DCMAKE_CROSSCOMPILING=ON',
-    #                 '-DCMAKE_C_COMPILER=\'' + clang_c_path + '\'',
-    #                 '-DCMAKE_CXX_COMPILER=\'' + clang_cxx_path + '\'',
-    #                 '-DCMAKE_BUILD_TYPE=Release',
-    #                 '-DCMAKE_INSTALL_PREFIX=' + rt_install_dir,
-    #                 '-DLLVM_TARGETS_TO_BUILD=Mips',
-    #                 '-DLLVM_TARGET_ARCH=Mips',
-    #                 '-DLLVM_DEFAULT_TARGET_TRIPLE=mipsel-linux-gnu-musl',
-    #                 '-DCMAKE_C_FLAGS=\'' + ' '.join(make_flags) + '\'',
-    #                 '-DCMAKE_CXX_FLAGS=\'' + ' '.join(make_flags) + '\'',
-    #                 '-DLLVM_ENABLE_PROJECTS=' + ';'.join(rt_projects),
-    #                 '-DLLVM_ENABLE_LLD=ON',
-    #                 '-DCMAKE_EXE_LINKER_FLAGS=-fuse-ld=lld',
-    #                 rt_make_dir]
-    extra_runtime_opts = ['-isystem', '"' + rt_musl_include_path + '"']
+    #for rt in runtimes:
+    for rt in ['llvm/runtimes']:
+        rt_build_dir = BUILD_PREFIX / 'runtimes' / rt
+        rt_src_dir = os.path.relpath(LLVM_WORKING_DIR / rt, rt_build_dir)
+        rt_install_dir = os.path.relpath(INSTALL_PREFIX / 'runtimes', rt_build_dir)
+        multilib_str = 'mips32/r2'
 
-    gen_build_cmd = ['cmake', '-G', 'Ninja', 
-                     '-DBAREMETAL_ARMV6M_SYSROOT=' + clang_sysroot,
-                     '-DBAREMETAL_ARMV7M_SYSROOT=' + clang_sysroot,
-                     '-DBAREMETAL_ARMV7EM_SYSROOT=' + clang_sysroot,
-                     '-DCMAKE_INSTALL_PREFIX=' + rt_install_dir,
-                     '-DPIC32CLANG_EXTRA_FLAGS=' + ';'.join(extra_runtime_opts),
-                     '-C', rt_cmake_config_path,
-                     rt_make_dir]
-    run_subprocess(gen_build_cmd, 'Generate LLVM runtime libraries build scripts', rt_build_dir)
+        if os.path.exists(rt_build_dir):
+            shutil.rmtree(rt_build_dir)
 
-    build_rt_cmd = ['cmake', '--build', '.']
-    run_subprocess(build_rt_cmd, 'Build LLVM runtime libraries', rt_build_dir)
+        os.makedirs(rt_build_dir)
 
-    install_rt_cmd = ['cmake', '--build', '.', '--target', 'install']
-    run_subprocess(install_rt_cmd, 'Install LLVM runtime libraries', rt_build_dir)
+        # TODO: Break this up and use individual CMake caches.
+        # TODO: Enable LTO and figure out if LTO libraries can be used in non-LTO builds.
+        gen_build_cmd = ['cmake', '-G', 'Ninja', 
+                        '-DCMAKE_CROSSCOMPILING=ON',
+                        '-DCMAKE_SYSROOT=\'' + clang_sysroot + '\'',
+                        '-DCMAKE_C_COMPILER=\'' + clang_c_path + '\'',
+                        '-DCMAKE_CXX_COMPILER=\'' + clang_cxx_path + '\'',
+                        '-DCMAKE_C_COMPILER_TARGET=mipsel-linux-gnu-musl',
+                        '-DCMAKE_CXX_COMPILER_TARGET=mipsel-linux-gnu-musl',
+                        '-DCMAKE_ASM_COMPILER_TARGET=mipsel-linux-gnu-musl',
+                        '-DCMAKE_AR=\'' + llvm_ar_path + '\'',
+                        '-DCMAKE_NM=\'' + llvm_nm_path + '\'',
+                        '-DCMAKE_RANLIB=\'' + llvm_ranlib_path + '\'',
+                        '-DCMAKE_BUILD_TYPE=Release',
+                        '-DCMAKE_INSTALL_PREFIX=\'' + rt_install_dir + '\'',
+                        '-DCMAKE_C_FLAGS=\'' + ' '.join(make_flags) + '\'',
+                        '-DCMAKE_CXX_FLAGS=\'' + ' '.join(make_flags) + '\'',
+                        '-DCMAKE_SYSTEM_NAME=Generic',
+        # TODO: Remove this linker flag when LLVM is rebuilt to use LLD by default.
+        #                '-DCMAKE_EXE_LINKER_FLAGS=-fuse-ld=lld',
+                        '-DCMAKE_TRY_COMPILE_TARGET_TYPE=STATIC_LIBRARY',
+
+                        '-DLLVM_INCLUDE_DOCS=ON',
+                        '-DLLVM_ENABLE_SPHINX=ON',
+        # TODO: Maybe figure out if this flag can be removed, but the checks fail because they need
+        #       libraries I haven't yet built.
+                        '-DLLVM_COMPILER_CHECKED=ON',
+                        '-DLLVM_ENABLE_RUNTIMES=' + ';'.join(runtimes),
+
+        # TODO: Fool CMake into thinking we're targeting Linux for the runtimes because otherwise
+        #       the CMake checks will fail with being unable to determine the target platform.
+        #       That's probably because I set CMAKE_SYSTEM_NAME to "Generic" above, but I don't know
+        #       if removing that will affect things on Windows vs Linux builds.
+                        '-DUNIX=ON',
+                        '-DWIN32=OFF',
+                        '-DAPPLE=OFF',
+                        '-DFUSCHIA=OFF',
+
+                        '-DCOMPILER_RT_OS_DIR=baremetal',
+                        '-DCOMPILER_RT_BAREMETAL_BUILD=ON',
+                        '-DCOMPILER_RT_DEFAULT_TARGET_ONLY=ON',
+                        '-DCOMPILER_RT_STANDALONE_BUILD=ON',
+                        '-DCOMPILER_RT_BUILD_BUILTINS=ON',
+                        '-DCOMPILER_RT_BUILD_CRT=ON',
+                        '-DCOMPILER_RT_CRT_USE_EH_FRAME_REGISTRY=ON',
+                        '-DCOMPILER_RT_BUILD_SANITIZERS=ON',
+                        '-DCOMPILER_RT_BUILD_XRAY=ON',
+                        '-DCOMPILER_RT_BUILD_LIBFUZZER=ON',
+                        '-DCOMPILER_RT_BUILD_PROFILE=ON',
+                        '-DCOMPILER_RT_USE_BUILTINS_LIBRARY=ON',
+                        '-DCOMPILER_RT_EXCLUDE_ATOMIC_BUILTIN=OFF',
+                        '-DSANITIZER_CXX_ABI=libcxxabi',
+                        '-DSANITIZER_TEST_CXX=libcxx',
+                        '-DSANITIZER_USE_STATIC_LLVM_UNWINDER=ON',
+                        '-DSANITIZER_USE_STATIC_CXX_ABI=ON',
+
+                        '-DLIBUNWIND_ENABLE_STATIC=ON',
+                        '-DLIBUNWIND_ENABLE_SHARED=OFF',
+                        '-DLIBUNWIND_USE_COMPILER_RT=ON',
+                        '-DLIBUNWIND_ENABLE_CROSS_UNWINDING=OFF',
+
+                        '-DLIBCXX_HAS_MUSL_LIBC=ON',
+                        '-DLIBCXX_STANDALONE_BUILD=ON',
+                        '-DLIBCXX_ENABLE_STATIC=ON',
+                        '-DLIBCXX_ENABLE_SHARED=OFF',
+                        '-DLIBCXX_ENABLE_FILESYSTEM=ON',
+                        '-DLIBCXX_ENABLE_EXPERIMENTAL_LIBRARY=ON',
+                        '-DLIBCXX_CXX_ABI=libcxxabi',
+                        '-DLIBCXX_USE_COMPILER_RT=ON',
+                        '-DLIBCXX_USE_LLVM_UNWINDER=ON',
+                        '-DLIBCXX_HAS_PTHREAD_API=ON',
+
+                        '-DLIBCXXABI_BAREMETAL=ON',
+                        '-DLIBCXXABI_STANDALONE_BUILD=ON',
+                        '-DLIBCXXABI_ENABLE_STATIC=ON',
+                        '-DLIBCXXABI_ENABLE_SHARED=OFF',
+                        '-DLIBCXXABI_USE_LLVM_UNWINDER=ON',
+                        '-DLIBCXXABI_USE_COMPILER_RT=ON',
+                        '-DLIBCXXABI_HAS_PTHREAD_API=ON',
+                        '-DLIBCXXABI_LIBCXX_INCLUDES=\'' + cxx_include_path + '\'',
+
+                        rt_src_dir]
+        #extra_runtime_opts = ['-isystem', '"' + rt_musl_include_path + '"']
+
+        #gen_build_cmd = ['cmake', '-G', 'Ninja', 
+        #                 '-DBAREMETAL_ARMV6M_SYSROOT=' + clang_sysroot,
+        #                 '-DBAREMETAL_ARMV7M_SYSROOT=' + clang_sysroot,
+        #                 '-DBAREMETAL_ARMV7EM_SYSROOT=' + clang_sysroot,
+        #                 '-DCMAKE_INSTALL_PREFIX=' + rt_install_dir,
+        #                 '-DPIC32CLANG_EXTRA_FLAGS=' + ';'.join(extra_runtime_opts),
+        #                 '-C', rt_cmake_config_path,
+        #                 rt_src_dir]
+        run_subprocess(gen_build_cmd, 'Generate ' + rt + ' build script (' + multilib_str + ')', rt_build_dir)
+
+        # Generate and install the C++ headers first because libcxxabi will need them.
+        install_cxx_headers_cmd = ['cmake', '--build', '.', '--target', 'install-cxx-headers']
+        run_subprocess(install_cxx_headers_cmd, 'Generate C++ Headers (' + multilib_str + ')', rt_build_dir)
+
+        build_rt_cmd = ['cmake', '--build', '.']
+        run_subprocess(build_rt_cmd, 'Build ' + rt + ' (' + multilib_str + ')', rt_build_dir)
+
+        install_rt_cmd = ['cmake', '--build', '.', '--target', 'install']
+        run_subprocess(install_rt_cmd, 'Install ' + rt + ' (' + multilib_str + ')', rt_build_dir)
     
 
 
@@ -616,10 +732,10 @@ if '__main__' == __name__:
     clone_from_git(LLVM_REPO_URL, LLVM_RELEASE_BRANCH, LLVM_WORKING_DIR, skip_if_exists=True)
     clone_from_git(MUSL_REPO_URL, MUSL_RELEASE_BRANCH, MUSL_WORKING_DIR, skip_if_exists=True)
 
-    print("\n*****\nBUILD LLVM COMMENTED OUT\n*****\n")
+    #print("\n*****\nBUILD LLVM COMMENTED OUT\n*****\n")
     #build_llvm()
 
-    print("\n*****\nBUILD MUSL COMMENTED OUT\n*****\n")
+    #print("\n*****\nBUILD MUSL COMMENTED OUT\n*****\n")
     #build_musl()
 
     #print("\n*****\nBUILD RUNTIMES COMMENTED OUT\n*****\n")
