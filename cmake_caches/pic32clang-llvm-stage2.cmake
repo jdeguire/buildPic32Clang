@@ -7,7 +7,7 @@
 # adding extra tools and options not in the original file.
 
 
-set(LLVM_ENABLE_PROJECTS "clang;clang-tools-extra;lld;lldb;polly;compiler-rt;libunwind;libc;libcxxabi;libcxx" CACHE STRING "")
+set(LLVM_ENABLE_PROJECTS "clang;clang-tools-extra;lld;lldb;polly" CACHE STRING "")
 set(LLVM_ENABLE_RUNTIMES "" CACHE STRING "")
 
 set(LLVM_TARGETS_TO_BUILD X86;ARM;Mips CACHE STRING "")
