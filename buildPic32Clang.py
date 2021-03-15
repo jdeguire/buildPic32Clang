@@ -552,132 +552,10 @@ def build_llvm_runtimes():
     llvm_nm_path = os.path.abspath(compiler_prefix / 'bin' / 'llvm-nm')
     llvm_ranlib_path = os.path.abspath(compiler_prefix / 'bin' / 'llvm-ranlib')
 
-
-    ##########
-    # Build just the builtins library.
-    ##########
-
-    builtins_flags = [
-                      '-target', 'mipsel-linux-gnu-musl',
-                      '-march=mips32r2',
-                      '-msoft-float',
-                      '-G0',
-                      '-static',
-                      '-fomit-frame-pointer',
-    # TODO: The rest of these options might not be needed for the builtins.
-                      '-isystem\'' + musl_include_path + '\'',
-    # Undefine these so that the output is the same regardless of build platform.
-    # Otherwise, libc++ will use platform-specific code based on which is defined.
-                      '-U__linux__',
-                      '-U__APPLE__',
-                      '-U_WIN32',
-    # These are defined if libc++ is configured to use Musl and __linux__ is defined.
-    # Define them manually so that they work the same regardless of build platform.
-                      '-D_LIBCPP_HAS_ALIGNED_ALLOC',
-                      '-D_LIBCPP_HAS_QUICK_EXIT',
-                      '-D_LIBCPP_HAS_TIMESPEC_GET',
-                      '-D_LIBCPP_HAS_C11_FEATURES'
-                     ]
-
-    builtins_build_dir = BUILD_PREFIX / 'builtins'
-    rt_src_dir = os.path.relpath(LLVM_WORKING_DIR / 'llvm' / 'runtimes', builtins_build_dir)
     rt_os_dir_name = 'baremetal'
-    builtins_install_prefix = os.path.relpath(INSTALL_PREFIX / 'runtimes', builtins_build_dir)
-    multilib_str = 'mips32/r2'
-
-    if os.path.exists(builtins_build_dir):
-        shutil.rmtree(builtins_build_dir)
-
-    os.makedirs(builtins_build_dir)
-
-    # TODO: Break this up and use individual CMake caches.
-    # TODO: Enable LTO and figure out if LTO libraries can be used in non-LTO builds.
-    gen_builtins_cmd = ['cmake', '-G', 'Ninja', 
-                        '-DCMAKE_CROSSCOMPILING=ON',
-                        '-DCMAKE_SYSROOT=\'' + clang_sysroot + '\'',
-                        '-DCMAKE_C_COMPILER=\'' + clang_c_path + '\'',
-                        '-DCMAKE_CXX_COMPILER=\'' + clang_cxx_path + '\'',
-                        '-DCMAKE_C_COMPILER_TARGET=mipsel-linux-gnu-musl',
-                        '-DCMAKE_CXX_COMPILER_TARGET=mipsel-linux-gnu-musl',
-                        '-DCMAKE_ASM_COMPILER_TARGET=mipsel-linux-gnu-musl',
-                        '-DCMAKE_AR=\'' + llvm_ar_path + '\'',
-                        '-DCMAKE_NM=\'' + llvm_nm_path + '\'',
-                        '-DCMAKE_RANLIB=\'' + llvm_ranlib_path + '\'',
-                        '-DCMAKE_BUILD_TYPE=Release',
-                        '-DCMAKE_INSTALL_PREFIX=\'' + builtins_install_prefix + '\'',
-                        '-DCMAKE_C_FLAGS=\'' + ' '.join(builtins_flags) + '\'',
-                        '-DCMAKE_CXX_FLAGS=\'' + ' '.join(builtins_flags) + '\'',
-    # TODO: CMAKE_SYSTEM_NAME will probably need to be "Linux" to get anything other than
-    #       the basic builtins.
-    #                    '-DCMAKE_SYSTEM_NAME=Generic',
-                        '-DCMAKE_SYSTEM_NAME=Linux',
-    # TODO: Remove this linker flag when LLVM is rebuilt to use LLD by default.
-    #                    '-DCMAKE_EXE_LINKER_FLAGS=-fuse-ld=lld',
-                        '-DCMAKE_TRY_COMPILE_TARGET_TYPE=STATIC_LIBRARY',
-
-                        '-DLLVM_INCLUDE_DOCS=ON',
-                        '-DLLVM_ENABLE_SPHINX=ON',
-    # TODO: Maybe figure out if this flag can be removed, but the checks fail because they need
-    #       libraries I haven't yet built.
-                        '-DLLVM_COMPILER_CHECKED=ON',
-                        '-DLLVM_ENABLE_RUNTIMES=compiler-rt',
-
-    # TODO: Fool CMake into thinking we're targeting Linux for the runtimes because otherwise
-    #       the CMake checks will fail with being unable to determine the target platform.
-    #       That's probably because I set CMAKE_SYSTEM_NAME to "Generic" above, but I don't know
-    #       if removing that will affect things on Windows vs Linux builds.
-    # These should not be needed if I set the system name to Linux.
-    #                    '-DUNIX=ON',
-    #                    '-DWIN32=OFF',
-    #                    '-DAPPLE=OFF',
-    #                    '-DFUSCHIA=OFF',
-
-    # Build only the builtins because the other parts need the builtins to have been built.
-                        '-DCOMPILER_RT_OS_DIR=' + rt_os_dir_name,
-                        '-DCOMPILER_RT_BAREMETAL_BUILD=ON',
-                        '-DCOMPILER_RT_DEFAULT_TARGET_ONLY=ON',
-                        '-DCOMPILER_RT_STANDALONE_BUILD=ON',
-                        '-DCOMPILER_RT_BUILD_BUILTINS=ON',
-                        '-DCOMPILER_RT_BUILD_CRT=OFF',
-                        '-DCOMPILER_RT_BUILD_SANITIZERS=OFF',
-                        '-DCOMPILER_RT_BUILD_XRAY=OFF',
-                        '-DCOMPILER_RT_BUILD_LIBFUZZER=OFF',
-                        '-DCOMPILER_RT_BUILD_PROFILE=OFF',
-                        '-DCOMPILER_RT_USE_BUILTINS_LIBRARY=OFF',
-                        '-DCOMPILER_RT_EXCLUDE_ATOMIC_BUILTIN=OFF',
-
-                        rt_src_dir]
-    run_subprocess(gen_builtins_cmd, 'Generate builtins build script (' + multilib_str + ')', builtins_build_dir)
-
-    build_builtins_cmd = ['cmake', '--build', '.']
-    run_subprocess(build_builtins_cmd, 'Build builtins (' + multilib_str + ')', builtins_build_dir)
-
-    install_builtins_cmd = ['cmake', '--build', '.', '--target', 'install']
-    run_subprocess(install_builtins_cmd, 'Install builtins (' + multilib_str + ')', builtins_build_dir)
-
 
     ##########
-    # Copy the builtins library to wherever Clang expects it to be for building the runtimes.
-    ##########
-    clang_rt_path_cmd = [
-                         clang_c_path,
-                         '--rtlib=compiler-rt',
-                         '-print-libgcc-file-name',
-                         '-target', 'mipsel-linux-gnu-musl'
-                        ]
-    completed_proc = subprocess.run(clang_rt_path_cmd, capture_output=True, text=True, bufsize=0,
-                                    timeout=5.0, encoding='utf-8', check=True)
-
-    builtins_expected_path = PurePosixPath(completed_proc.stdout.strip())
-    builtins_lib_name = builtins_expected_path.name
-    builtins_built_lib_path = builtins_build_dir / 'compiler-rt' / 'lib' / rt_os_dir_name / builtins_lib_name
-
-    if not os.path.exists(builtins_expected_path.parent):
-        os.makedirs(builtins_expected_path.parent)
-    shutil.copyfile(builtins_built_lib_path, builtins_expected_path)
-
-    ##########
-    # Build all the runtimes.
+    # Build most runtimes, except for the sanitizers and compiler-rt extras.
     ##########
 
     rt_flags = [
@@ -692,7 +570,6 @@ def build_llvm_runtimes():
     ### This is stuff that will apply to every build.
     #            '-v',
                 '-isystem\'' + musl_include_path + '\'',
-    #            '-L\'' + builtins_install_prefix + '/lib/' + rt_os_dir_name + '\'',
     # Undefine these so that the output is the same regardless of build platform.
     # Otherwise, libc++ will use platform-specific code based on which is defined.
                 '-U__linux__',
@@ -762,20 +639,15 @@ def build_llvm_runtimes():
                      '-DCOMPILER_RT_BAREMETAL_BUILD=ON',
                      '-DCOMPILER_RT_DEFAULT_TARGET_ONLY=ON',
                      '-DCOMPILER_RT_STANDALONE_BUILD=ON',
-    # The builtins were already built above
-                     '-DCOMPILER_RT_BUILD_BUILTINS=OFF',
-                     '-DCOMPILER_RT_BUILD_CRT=ON',
-                     '-DCOMPILER_RT_CRT_USE_EH_FRAME_REGISTRY=ON',
-                     '-DCOMPILER_RT_BUILD_SANITIZERS=ON',
-                     '-DCOMPILER_RT_BUILD_XRAY=ON',
-                     '-DCOMPILER_RT_BUILD_LIBFUZZER=ON',
-                     '-DCOMPILER_RT_BUILD_PROFILE=ON',
+    # We can build only the builtins now.
+                     '-DCOMPILER_RT_BUILD_BUILTINS=ON',
+                     '-DCOMPILER_RT_BUILD_CRT=OFF',
+                     '-DCOMPILER_RT_BUILD_SANITIZERS=OFF',
+                     '-DCOMPILER_RT_BUILD_XRAY=OFF',
+                     '-DCOMPILER_RT_BUILD_LIBFUZZER=OFF',
+                     '-DCOMPILER_RT_BUILD_PROFILE=OFF',
                      '-DCOMPILER_RT_USE_BUILTINS_LIBRARY=ON',
                      '-DCOMPILER_RT_EXCLUDE_ATOMIC_BUILTIN=OFF',
-                     '-DSANITIZER_CXX_ABI=libcxxabi',
-                     '-DSANITIZER_TEST_CXX=libcxx',
-                     '-DSANITIZER_USE_STATIC_LLVM_UNWINDER=ON',
-                     '-DSANITIZER_USE_STATIC_CXX_ABI=ON',
 
                      '-DLIBUNWIND_ENABLE_STATIC=ON',
                      '-DLIBUNWIND_ENABLE_SHARED=OFF',
@@ -814,7 +686,131 @@ def build_llvm_runtimes():
 
     install_rt_cmd = ['cmake', '--build', '.', '--target', 'install']
     run_subprocess(install_rt_cmd, 'Install runtimes (' + multilib_str + ')', rt_build_dir)
-    
+
+    ##########
+    # Copy the builtins library to wherever Clang expects it to be for building the runtimes.
+    ##########
+    clang_rt_path_cmd = [
+                         clang_c_path,
+                         '--rtlib=compiler-rt',
+                         '-print-libgcc-file-name',
+                         '-target', 'mipsel-linux-gnu-musl'
+                        ]
+    completed_proc = subprocess.run(clang_rt_path_cmd, capture_output=True, text=True, bufsize=0,
+                                    timeout=5.0, encoding='utf-8', check=True)
+
+    builtins_expected_path = PurePosixPath(completed_proc.stdout.strip())
+    builtins_lib_name = builtins_expected_path.name
+    builtins_built_lib_path = rt_build_dir / 'compiler-rt' / 'lib' / rt_os_dir_name / builtins_lib_name
+
+    if not os.path.exists(builtins_expected_path.parent):
+        os.makedirs(builtins_expected_path.parent)
+    shutil.copyfile(builtins_built_lib_path, builtins_expected_path)
+
+    ##########
+    # Build the compiler-rt extras.
+    ##########
+
+    rt_extras_flags = [
+                       '-target', 'mipsel-linux-gnu-musl',
+                       '-march=mips32r2',
+                       '-msoft-float',
+                       '-G0',
+                       '-static',
+                       '-fomit-frame-pointer',
+    # TODO: The rest of these options might not be needed for the extras.
+                       '-isystem\'' + musl_include_path + '\'',
+    # Pretend the target is Linux so that the extra build.
+    #                   '-U__linux__',
+                       '-U__APPLE__',
+                       '-U_WIN32',
+    # These are defined if libc++ is configured to use Musl and __linux__ is defined.
+    # Define them manually so that they work the same regardless of build platform.
+                       '-D_LIBCPP_HAS_ALIGNED_ALLOC',
+                       '-D_LIBCPP_HAS_QUICK_EXIT',
+                       '-D_LIBCPP_HAS_TIMESPEC_GET',
+                       '-D_LIBCPP_HAS_C11_FEATURES'
+                      ]
+
+    rt_extras_build_dir = BUILD_PREFIX / 'builtins'
+    rt_src_dir = os.path.relpath(LLVM_WORKING_DIR / 'llvm' / 'runtimes', rt_extras_build_dir)
+    rt_extras_install_prefix = os.path.relpath(INSTALL_PREFIX / 'runtimes', rt_extras_build_dir)
+    multilib_str = 'mips32/r2'
+
+    if os.path.exists(rt_extras_build_dir):
+        shutil.rmtree(rt_extras_build_dir)
+
+    os.makedirs(rt_extras_build_dir)
+
+    # TODO: Break this up and use individual CMake caches.
+    # TODO: Enable LTO and figure out if LTO libraries can be used in non-LTO builds.
+    gen_rt_extras_cmd = ['cmake', '-G', 'Ninja', 
+                        '-DCMAKE_CROSSCOMPILING=ON',
+                        '-DCMAKE_SYSROOT=\'' + clang_sysroot + '\'',
+                        '-DCMAKE_C_COMPILER=\'' + clang_c_path + '\'',
+                        '-DCMAKE_CXX_COMPILER=\'' + clang_cxx_path + '\'',
+                        '-DCMAKE_C_COMPILER_TARGET=mipsel-linux-gnu-musl',
+                        '-DCMAKE_CXX_COMPILER_TARGET=mipsel-linux-gnu-musl',
+                        '-DCMAKE_ASM_COMPILER_TARGET=mipsel-linux-gnu-musl',
+                        '-DCMAKE_AR=\'' + llvm_ar_path + '\'',
+                        '-DCMAKE_NM=\'' + llvm_nm_path + '\'',
+                        '-DCMAKE_RANLIB=\'' + llvm_ranlib_path + '\'',
+                        '-DCMAKE_BUILD_TYPE=Release',
+                        '-DCMAKE_INSTALL_PREFIX=\'' + rt_extras_install_prefix + '\'',
+                        '-DCMAKE_C_FLAGS=\'' + ' '.join(rt_extras_flags) + '\'',
+                        '-DCMAKE_CXX_FLAGS=\'' + ' '.join(rt_extras_flags) + '\'',
+    # TODO: CMAKE_SYSTEM_NAME will probably need to be "Linux" to get anything other than
+    #       the basic builtins.
+    #                    '-DCMAKE_SYSTEM_NAME=Generic',
+                        '-DCMAKE_SYSTEM_NAME=Linux',
+    # TODO: Remove this linker flag when LLVM is rebuilt to use LLD by default.
+    #                    '-DCMAKE_EXE_LINKER_FLAGS=-fuse-ld=lld',
+                        '-DCMAKE_TRY_COMPILE_TARGET_TYPE=STATIC_LIBRARY',
+
+                        '-DLLVM_INCLUDE_DOCS=ON',
+                        '-DLLVM_ENABLE_SPHINX=ON',
+    # TODO: Maybe figure out if this flag can be removed, but the checks fail because they need
+    #       libraries I haven't yet built.
+                        '-DLLVM_COMPILER_CHECKED=ON',
+                        '-DLLVM_ENABLE_RUNTIMES=compiler-rt',
+
+    # TODO: Fool CMake into thinking we're targeting Linux for the runtimes because otherwise
+    #       the CMake checks will fail with being unable to determine the target platform.
+    #       That's probably because I set CMAKE_SYSTEM_NAME to "Generic" above, but I don't know
+    #       if removing that will affect things on Windows vs Linux builds.
+    # These should not be needed if I set the system name to Linux.
+    #                    '-DUNIX=ON',
+    #                    '-DWIN32=OFF',
+    #                    '-DAPPLE=OFF',
+    #                    '-DFUSCHIA=OFF',
+
+    # Builtins were already built, so build everything else instead.
+                        '-DCOMPILER_RT_OS_DIR=' + rt_os_dir_name,
+                        '-DCOMPILER_RT_BAREMETAL_BUILD=ON',
+                        '-DCOMPILER_RT_DEFAULT_TARGET_ONLY=ON',
+                        '-DCOMPILER_RT_STANDALONE_BUILD=ON',
+                        '-DCOMPILER_RT_BUILD_BUILTINS=OFF',
+                        '-DCOMPILER_RT_BUILD_CRT=ON',
+                        '-DCOMPILER_RT_CRT_USE_EH_FRAME_REGISTRY=ON',
+                        '-DCOMPILER_RT_BUILD_SANITIZERS=ON',
+                        '-DCOMPILER_RT_BUILD_XRAY=ON',
+                        '-DCOMPILER_RT_BUILD_LIBFUZZER=ON',
+                        '-DCOMPILER_RT_BUILD_PROFILE=ON',
+                        '-DCOMPILER_RT_USE_BUILTINS_LIBRARY=ON',
+                        '-DSANITIZER_CXX_ABI=libcxxabi',
+                        '-DSANITIZER_TEST_CXX=libcxx',
+                        '-DSANITIZER_USE_STATIC_LLVM_UNWINDER=ON',
+                        '-DSANITIZER_USE_STATIC_CXX_ABI=ON',
+
+                        rt_src_dir]
+    run_subprocess(gen_rt_extras_cmd, 'Generate runtime extras build script (' + multilib_str + ')', rt_extras_build_dir)
+
+    build_rt_extras_cmd = ['cmake', '--build', '.']
+    run_subprocess(build_rt_extras_cmd, 'Build runtime extras (' + multilib_str + ')', rt_extras_build_dir)
+
+    install_rt_extras_cmd = ['cmake', '--build', '.', '--target', 'install']
+    run_subprocess(install_rt_extras_cmd, 'Install runtime extras (' + multilib_str + ')', rt_extras_build_dir)
+
 
 
 # This is true when this file is executed as a script rather than imported into another file.  We
