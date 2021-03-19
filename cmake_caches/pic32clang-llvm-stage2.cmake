@@ -5,6 +5,11 @@
 # from "llvm/clang/cmake/caches/DistributionExample-stage2.cmake". This is modified
 # to build Pic32Clang, such as by having it build support for MIPS devices and by
 # adding extra tools and options not in the original file.
+#
+# The original example file did not have a copyright or license notice, but
+# Clang is covered under a modified Apache 2.0 license. Presumably, that
+# includes the example code and so this will follow suit. A copy of the
+# license is provided in LICENSE.txt.
 
 
 set(LLVM_ENABLE_PROJECTS "clang;clang-tools-extra;lld;lldb;polly" CACHE STRING "")
@@ -12,8 +17,7 @@ set(LLVM_ENABLE_RUNTIMES "" CACHE STRING "")
 
 set(LLVM_TARGETS_TO_BUILD X86;ARM;Mips CACHE STRING "")
 
-#set(CMAKE_BUILD_TYPE RelWithDebInfo CACHE STRING "")
-set(CMAKE_BUILD_TYPE Debug CACHE STRING "")
+# Set BOOTSTRAP_CMAKE_BUILD_TYPE on the command line to pick which of these flags to use.
 set(CMAKE_C_FLAGS_RELWITHDEBINFO "-O3 -gline-tables-only -DNDEBUG" CACHE STRING "")
 set(CMAKE_CXX_FLAGS_RELWITHDEBINFO "-O3 -gline-tables-only -DNDEBUG" CACHE STRING "")
 set(CMAKE_C_FLAGS_DEBUG "-O1 -g" CACHE STRING "")
@@ -80,6 +84,5 @@ set(LLVM_DISTRIBUTION_COMPONENTS
   clang-tidy
   clangd
   builtins
-#  runtimes
   ${LLVM_TOOLCHAIN_TOOLS}
   CACHE STRING "")

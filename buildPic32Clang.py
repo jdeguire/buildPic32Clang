@@ -412,6 +412,8 @@ def build_llvm():
     gen_build_cmd = ['cmake', '-G', 'Ninja',
                      '-DCMAKE_INSTALL_PREFIX=' + llvm_install_dir,
                      '-DBOOTSTRAP_LLVM_ENABLE_LTO=OFF',
+                     '-DBOOTSTRAP_CMAKE_BUILD_TYPE=Debug',
+    #                 '-DBOOTSTRAP_CMAKE_BUILD_TYPE=RelWithDebInfo',
                      '-C', llvm_cmake_config_path,
                      llvm_src_dir]
     run_subprocess(gen_build_cmd, 'Generate LLVM build script', llvm_build_dir)
@@ -539,137 +541,42 @@ def build_llvm_runtimes():
     target libraries.
     '''
     musl_include_path = os.path.abspath(INSTALL_PREFIX / 'musl' / 'mips32' / 'r2' / 'include')
-    cxx_include_path = os.path.abspath(INSTALL_PREFIX / 'runtimes' / 'include' / 'c++' / 'v1')
 
     # Use the stage2 compiler location instead of the final install location because this has
     # llvm-config and all the CMake cache files it looks for to determine how to build libraries.
     compiler_prefix = BUILD_PREFIX / 'llvm' / 'tools' / 'clang' / 'stage2-bins'
 
     clang_sysroot = os.path.abspath(compiler_prefix)
-    clang_c_path = os.path.abspath(compiler_prefix / 'bin' / 'clang')
-    clang_cxx_path = os.path.abspath(compiler_prefix / 'bin' / 'clang++')
-    llvm_ar_path = os.path.abspath(compiler_prefix / 'bin' / 'llvm-ar')
-    llvm_nm_path = os.path.abspath(compiler_prefix / 'bin' / 'llvm-nm')
-    llvm_ranlib_path = os.path.abspath(compiler_prefix / 'bin' / 'llvm-ranlib')
-
-    rt_os_dir_name = 'baremetal'
 
     rt_flags = [
-    ### This is arch-specific stuff.
-                '-target', 'mipsel-linux-gnu-musl',
                 '-march=mips32r2',
                 '-msoft-float',
                 '-G0',
-                '-static',
                 '-fomit-frame-pointer',
-
-    ### This is stuff that will apply to every build.
-    #            '-v',
-                '-isystem\'' + musl_include_path + '\'',
-    # Undefine these so that the output is the same regardless of build platform.
-    # Otherwise, libc++ will use platform-specific code based on which is defined.
-                '-U__linux__',
-                '-U__APPLE__',
-                '-U_WIN32',
-    # These are defined if libc++ is configured to use Musl and __linux__ is defined.
-    # Define them manually so that they work the same regardless of build platform.
-                '-D_LIBCPP_HAS_ALIGNED_ALLOC',
-                '-D_LIBCPP_HAS_QUICK_EXIT',
-                '-D_LIBCPP_HAS_TIMESPEC_GET',
-                '-D_LIBCPP_HAS_C11_FEATURES'
                ]
 
     rt_build_dir = BUILD_PREFIX / 'runtimes'
     rt_src_dir = os.path.relpath(LLVM_WORKING_DIR / 'llvm' / 'runtimes', rt_build_dir)
-    rt_install_prefix = os.path.relpath(INSTALL_PREFIX / 'runtimes', rt_build_dir)
+    rt_install_prefix = os.path.abspath(INSTALL_PREFIX / 'runtimes')
     multilib_str = 'mips32/r2'
+    target_triple = 'mipsel-linux-gnu-musl'
+
+    rt_cmake_config_path = os.path.relpath(CMAKE_CACHE_DIR / 'pic32clang-target-runtimes.cmake',
+                                             rt_build_dir)
 
     if os.path.exists(rt_build_dir):
         shutil.rmtree(rt_build_dir)
 
     os.makedirs(rt_build_dir)
 
-    # TODO: Break this up and use individual CMake caches.
     # TODO: Enable LTO and figure out if LTO libraries can be used in non-LTO builds.
     gen_build_cmd = ['cmake', '-G', 'Ninja', 
-                     '-DCMAKE_CROSSCOMPILING=ON',
-                     '-DCMAKE_SYSROOT=\'' + clang_sysroot + '\'',
-                     '-DCMAKE_C_COMPILER=\'' + clang_c_path + '\'',
-                     '-DCMAKE_CXX_COMPILER=\'' + clang_cxx_path + '\'',
-                     '-DCMAKE_C_COMPILER_TARGET=mipsel-linux-gnu-musl',
-                     '-DCMAKE_CXX_COMPILER_TARGET=mipsel-linux-gnu-musl',
-                     '-DCMAKE_ASM_COMPILER_TARGET=mipsel-linux-gnu-musl',
-                     '-DCMAKE_AR=\'' + llvm_ar_path + '\'',
-                     '-DCMAKE_NM=\'' + llvm_nm_path + '\'',
-                     '-DCMAKE_RANLIB=\'' + llvm_ranlib_path + '\'',
-                     '-DCMAKE_BUILD_TYPE=Release',
                      '-DCMAKE_INSTALL_PREFIX=\'' + rt_install_prefix + '\'',
-                     '-DCMAKE_C_FLAGS=\'' + ' '.join(rt_flags) + '\'',
-                     '-DCMAKE_CXX_FLAGS=\'' + ' '.join(rt_flags) + '\'',
-    # TODO: CMAKE_SYSTEM_NAME will probably need to be "Linux" to get anything other than
-    #       the basic builtins.
-    #                 '-DCMAKE_SYSTEM_NAME=Generic',
-                     '-DCMAKE_SYSTEM_NAME=Linux',
-    # TODO: Remove this linker flag when LLVM is rebuilt to use LLD by default.
-    #                 '-DCMAKE_EXE_LINKER_FLAGS=-fuse-ld=lld',
-                     '-DCMAKE_TRY_COMPILE_TARGET_TYPE=STATIC_LIBRARY',
-
-                     '-DLLVM_INCLUDE_DOCS=ON',
-                     '-DLLVM_ENABLE_SPHINX=ON',
-    # TODO: Maybe figure out if this flag can be removed, but the checks fail because they need
-    #       libraries I haven't yet built.
-                     '-DLLVM_COMPILER_CHECKED=ON',
-                     '-DLLVM_ENABLE_RUNTIMES=all',
-
-    # TODO: Fool CMake into thinking we're targeting Linux for the runtimes because otherwise
-    #       the CMake checks will fail with being unable to determine the target platform.
-    #       That's probably because I set CMAKE_SYSTEM_NAME to "Generic" above, but I don't know
-    #       if removing that will affect things on Windows vs Linux builds.
-    # These should not be needed if I set the system name to Linux.
-    #                 '-DUNIX=ON',
-    #                 '-DWIN32=OFF',
-    #                 '-DAPPLE=OFF',
-    #                 '-DFUSCHIA=OFF',
-
-                     '-DCOMPILER_RT_OS_DIR=' + rt_os_dir_name,
-                     '-DCOMPILER_RT_BAREMETAL_BUILD=ON',
-                     '-DCOMPILER_RT_DEFAULT_TARGET_ONLY=ON',
-                     '-DCOMPILER_RT_STANDALONE_BUILD=ON',
-    # We can build only the builtins now.
-                     '-DCOMPILER_RT_BUILD_BUILTINS=ON',
-                     '-DCOMPILER_RT_BUILD_CRT=OFF',
-                     '-DCOMPILER_RT_BUILD_SANITIZERS=OFF',
-                     '-DCOMPILER_RT_BUILD_XRAY=OFF',
-                     '-DCOMPILER_RT_BUILD_LIBFUZZER=OFF',
-                     '-DCOMPILER_RT_BUILD_PROFILE=OFF',
-                     '-DCOMPILER_RT_USE_BUILTINS_LIBRARY=ON',
-                     '-DCOMPILER_RT_EXCLUDE_ATOMIC_BUILTIN=OFF',
-
-                     '-DLIBUNWIND_ENABLE_STATIC=ON',
-                     '-DLIBUNWIND_ENABLE_SHARED=OFF',
-                     '-DLIBUNWIND_USE_COMPILER_RT=ON',
-                     '-DLIBUNWIND_ENABLE_CROSS_UNWINDING=OFF',
-
-                     '-DLIBCXX_HAS_MUSL_LIBC=ON',
-                     '-DLIBCXX_STANDALONE_BUILD=ON',
-                     '-DLIBCXX_ENABLE_STATIC=ON',
-                     '-DLIBCXX_ENABLE_SHARED=OFF',
-                     '-DLIBCXX_ENABLE_FILESYSTEM=ON',
-                     '-DLIBCXX_ENABLE_EXPERIMENTAL_LIBRARY=ON',
-                     '-DLIBCXX_CXX_ABI=libcxxabi',
-                     '-DLIBCXX_USE_COMPILER_RT=ON',
-                     '-DLIBCXX_USE_LLVM_UNWINDER=ON',
-                     '-DLIBCXX_HAS_PTHREAD_API=ON',
-
-                     '-DLIBCXXABI_BAREMETAL=ON',
-                     '-DLIBCXXABI_STANDALONE_BUILD=ON',
-                     '-DLIBCXXABI_ENABLE_STATIC=ON',
-                     '-DLIBCXXABI_ENABLE_SHARED=OFF',
-                     '-DLIBCXXABI_USE_LLVM_UNWINDER=ON',
-                     '-DLIBCXXABI_USE_COMPILER_RT=ON',
-                     '-DLIBCXXABI_HAS_PTHREAD_API=ON',
-                     '-DLIBCXXABI_LIBCXX_INCLUDES=\'' + cxx_include_path + '\'',
-
+                     '-DPIC32CLANG_TARGET_TRIPLE=' + target_triple,
+                     '-DPIC32CLANG_RUNTIME_FLAGS=' + ';'.join(rt_flags),
+                     '-DPIC32CLANG_MUSL_INCLUDES=\'' + musl_include_path + '\'',
+                     '-DPIC32CLANG_SYSROOT=\'' + clang_sysroot + '\'',
+                     '-C', rt_cmake_config_path,
                      rt_src_dir]
     run_subprocess(gen_build_cmd, 'Generate runtimes build script (' + multilib_str + ')', rt_build_dir)
 

@@ -2,6 +2,11 @@
 #
 # This is based on an example cache file provided by Clang and originally came
 # from "llvm/clang/cmake/caches/DistributionExample.cmake".
+#
+# The original example file did not have a copyright or license notice, but
+# Clang is covered under a modified Apache 2.0 license. Presumably, that
+# includes the example code and so this will follow suit. A copy of the
+# license is provided in LICENSE.txt.
 
 
 # Enable LLVM projects and runtimes

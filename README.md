@@ -6,7 +6,7 @@ This README will get more detailed in the future (I hope...) as I complete more 
 # Requirements
 This script was written using Python 3.8 and does not require any external dependencies.  In addition, your platform needs to be able to build and run Clang (duh) and needs to support ANSI terminal control codes to make the output readable.  This means Macs, Unixes, and Windows 10.
 
-Note that at the moment the script will not run under Windows because it uses the ```fnctl``` module, but I can hopefully change that in the future.  You can run it using the Windows Subsytem for Linux (WSL), which is actually what I'm running the script in.
+So far, this script has been run only under the Windows Subsytem for Linux (WSL) on Windows 10. The intent is for it to also support running on a Windows terminal as well, but that has not yet been tested very much.
 
 # How to Run
 For now, this script can be run by opening up a terminal interface and running ```./buildPic32Clang.py``` (Unix/Linux/WSL/etc.) or ```python3 .\buildPic32Clang.py``` (Windows).  I plan to add command-line arguments in the future to control things like skipping certain parts of the build or just getting the sources without building--stuff like that.
@@ -20,3 +20,5 @@ For the closest-to-native experience with Microchip tools, you will also want to
 
 # License
 See the LICENSE file for the full thing, but basically this is licensed using the BSD 3-clause license because I don't know anything about licenses and that one seemed good.
+
+The CMake cache files located under "cmake_caches" are licensed under the modified Apache 2.0 license used by Clang. Those files started out as copies of exmaple CMake files from the Clang source and so presumably they must comply with Clang's license. Again, I know nothing about licenses, so this also seems good. 
