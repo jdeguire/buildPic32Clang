@@ -37,6 +37,17 @@ set(SPHINX_OUTPUT_MAN ON CACHE BOOL "")
 #set(LLVM_ENABLE_LIBCXX ON CACHE BOOL "")
 #set(LLVM_BUILD_STATIC ON CACHE BOOL "")
 
+# Build just the builtins for now. These and the rest of the runtime libraries need
+# to be built separately due to errors found when running CMake compiler tests. The
+# root cause appears to be Clang complaining it can't find these libraries because
+# that is what we were trying to build.
+set(COMPILER_RT_DEFAULT_TARGET_ONLY ON CACHE BOOL "")
+set(COMPILER_RT_BUILD_SANITIZERS OFF CACHE BOOL "")
+set(COMPILER_RT_BUILD_XRAY OFF CACHE BOOL "")
+set(COMPILER_RT_BUILD_LIBFUZZER OFF CACHE BOOL "")
+set(COMPILER_RT_BUILD_PROFILE OFF CACHE BOOL "")
+set(COMPILER_RT_BUILD_MEMPROF OFF CACHE BOOL "")
+
 # Stuff that supposedly helps improve build times, mostly for debug builds.
 set(LLVM_OPTIMIZED_TABLEGEN ON CACHE BOOL "")
 set(LLVM_USE_SPLIT_DWARF ON CACHE BOOL "")

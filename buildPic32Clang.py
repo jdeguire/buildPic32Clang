@@ -605,13 +605,13 @@ if '__main__' == __name__:
     clone_from_git(MUSL_REPO_URL, MUSL_RELEASE_BRANCH, MUSL_WORKING_DIR, skip_if_exists=True)
 
     #print("\n*****\nBUILD LLVM COMMENTED OUT\n*****\n")
-    #build_llvm()
+    build_llvm()
 
     #print("\n*****\nBUILD MUSL COMMENTED OUT\n*****\n")
     #build_musl()
 
     #print("\n*****\nBUILD RUNTIMES COMMENTED OUT\n*****\n")
-    build_llvm_runtimes()
+    #build_llvm_runtimes()
 
     # Do this extra print because otherwise the info string will be below where the command prompt
     # re-appears after this ends.
