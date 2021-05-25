@@ -71,6 +71,7 @@ set(LLVM_TOOLCHAIN_TOOLS
   llvm-config
   llvm-cxxfilt
   llvm-dwarfdump
+  llvm-mc
   llvm-nm
   llvm-objdump
   llvm-ranlib
@@ -94,6 +95,8 @@ set(LLVM_DISTRIBUTION_COMPONENTS
   clang-resource-headers
   clang-tidy
   clangd
-  builtins
+# TODO: This was commented out because CMake said there was no target for it when trying to use this
+#       cache to create a single-stage build. Is it needed? Why complain now?
+#  builtins
   ${LLVM_TOOLCHAIN_TOOLS}
   CACHE STRING "")

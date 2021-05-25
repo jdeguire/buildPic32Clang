@@ -1,18 +1,19 @@
 diff --git a/clang/test/CodeGen/mips16-mult.c b/clang/test/CodeGen/mips16-mult.c
 new file mode 100644
-index 000000000000..78e932faa0cc
+index 000000000000..a78d3a7c90c7
 --- /dev/null
 +++ b/clang/test/CodeGen/mips16-mult.c
-@@ -0,0 +1,10 @@
+@@ -0,0 +1,11 @@
 +// REQUIRES: mips-registered-target
 +// RUN: %clang --target=mipsel-unknown-linux -mips16 -c -o %t %s
-+ 
-+// Check for BugZilla bug 49146 "Crash with MIPS16 Multiply".
-+// The bug does not manifest when using the "-S" or "-emit-llvm" options.
++// RUN: %clang --target=mipsel-unknown-linux -mips16 -c -S %s -o -| FileCheck %s
 +
-+unsigned do_mult(unsigned n, unsigned m)
-+{
-+    return n * m;
++// Check for BugZilla bug 49146 "Crash with MIPS16 Multiply".
++
++unsigned do_mult(unsigned n, unsigned m) {
++  return n * m;
++// CHECK: mult ${{[0-9]+}}, ${{[0-9]+}}
++// CHECK: mflo ${{[0-9]+}}
 +}
 diff --git a/llvm/lib/Target/Mips/Mips16ISelDAGToDAG.cpp b/llvm/lib/Target/Mips/Mips16ISelDAGToDAG.cpp
 index ddd28d095e51..667a4b426381 100644
@@ -12971,3 +12972,28 @@ index f076f2f9cf10..b4da840d060a 100644
      (instregex "^ATOMIC_LOAD_(ADD|SUB|AND|OR|XOR|NAND|MIN|MAX|UMIN|UMAX)"
                 "_I(8|16|32|64)_POSTRA$")>;
  }
+diff --git a/llvm/test/CodeGen/Mips/mips16-mult.ll b/llvm/test/CodeGen/Mips/mips16-mult.ll
+new file mode 100644
+index 000000000000..54227077ec23
+--- /dev/null
++++ b/llvm/test/CodeGen/Mips/mips16-mult.ll
+@@ -0,0 +1,19 @@
++; RUN: llc -march=mipsel -mattr=mips16 < %s | FileCheck %s
++
++; Function Attrs: noinline nounwind optnone
++define dso_local i32 @do_mult(i32 signext %n, i32 signext %m) #0 {
++entry:
++  %n.addr = alloca i32, align 4
++  %m.addr = alloca i32, align 4
++  store i32 %n, i32* %n.addr, align 4
++  store i32 %m, i32* %m.addr, align 4
++  %0 = load i32, i32* %n.addr, align 4
++  %1 = load i32, i32* %m.addr, align 4
++  %mul = mul i32 %0, %1
++;CHECK: mult ${{[0-9]+}}, ${{[0-9]+}}
++;CHECK: mflo ${{[0-9]+}}
++  ret i32 %mul
++}
++
++attributes #0 = { noinline nounwind optnone "frame-pointer"="all" "min-legal-vector-width"="0" "no-trapping-math"="true" "stack-protector-buffer-size"="8" "target-cpu"="mips32r2" "target-features"="+mips16,+mips32r2,-noabicalls" }
++
