@@ -11,11 +11,10 @@
 # includes the example code and so this will follow suit. A copy of the
 # license is provided in LICENSE.txt.
 
-
 set(LLVM_ENABLE_PROJECTS "clang;clang-tools-extra;lld;lldb;polly" CACHE STRING "")
 set(LLVM_ENABLE_RUNTIMES "" CACHE STRING "")
 
-set(LLVM_TARGETS_TO_BUILD X86;ARM;Mips CACHE STRING "")
+set(LLVM_TARGETS_TO_BUILD ARM;Mips CACHE STRING "")
 
 # Set BOOTSTRAP_CMAKE_BUILD_TYPE on the command line to pick which of these flags to use.
 set(CMAKE_C_FLAGS_RELWITHDEBINFO "-O3 -gline-tables-only -DNDEBUG" CACHE STRING "")

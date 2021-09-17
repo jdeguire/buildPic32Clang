@@ -55,19 +55,21 @@ import subprocess
 import os
 import time
 import shutil
-from pathlib import PurePosixPath, Path
-
+from pathlib import PurePath, Path
+from typing import NamedTuple
+from typing import List
 
 PIC32_CLANG_VERSION = '0.01'
+SINGLE_STAGE_LLVM = True
 
 # Note that '/' is an operator for stuff in pathlib that joins path segments.
-ROOT_WORKING_DIR = PurePosixPath('.', 'pic32clang')
+ROOT_WORKING_DIR = PurePath('./pic32clang')
 BUILD_PREFIX = ROOT_WORKING_DIR / 'build'
 INSTALL_PREFIX = ROOT_WORKING_DIR / 'install'
 
 LLVM_REPO_URL = 'https://github.com/llvm/llvm-project.git'
 LLVM_RELEASE_BRANCH = 'llvmorg-11.0.1'
-LLVM_WORKING_DIR = ROOT_WORKING_DIR / 'llvm'
+LLVM_SRC_DIR = ROOT_WORKING_DIR / 'llvm'
 
 # Use my clone of Musl for now because it will contain mods to get it to work
 # on our PIC32 and SAM devices.
@@ -75,9 +77,9 @@ LLVM_WORKING_DIR = ROOT_WORKING_DIR / 'llvm'
 #MUSL_RELEASE_BRANCH = ''
 MUSL_REPO_URL = 'https://github.com/jdeguire/musl.git'
 MUSL_RELEASE_BRANCH = 'v1.2.2_baremetal'
-MUSL_WORKING_DIR = ROOT_WORKING_DIR / 'musl'
+MUSL_SRC_DIR = ROOT_WORKING_DIR / 'musl'
 
-CMAKE_CACHE_DIR = PurePosixPath(os.path.dirname(os.path.realpath(__file__)), 'cmake_caches')
+CMAKE_CACHE_DIR = PurePath(os.path.dirname(os.path.realpath(__file__)), 'cmake_caches')
 
 
 def is_windows():
@@ -189,7 +191,8 @@ def clone_from_git(url, branch=None, dest_directory=None, skip_if_exists=False):
     otherwise, the underlying subprocess code will throw a subprocess.CalledProcessError.
     '''
     cmd = ['git', 'clone']
-
+# TODO: Use '--depth=1' to get a shallow clone
+# TODO: For Windows, need to add '--config core.autocrlf=false (at least for LLVM)
     if branch:
         cmd.append('-b')
         cmd.append(branch)
@@ -218,184 +221,163 @@ def clone_from_git(url, branch=None, dest_directory=None, skip_if_exists=False):
 # -- It's not clear if Clang/LLVM cares about r2 vs r5 (it might only care about r6 vs rest).
 # -- MIPS16 is commented out for now because Clang/LLVM can crash when trying to use it.
 # -- microMIPS + FPU is commented out for now because Clang/LLVM can crash when trying to use it.
-MIPS32_MULTILIB_PREFIX = PurePosixPath('target', 'mips32', 'lib')
-MIPS32_MULTILIBS = [PurePosixPath('r2'),
-#                    PurePosixPath('r2', 'mips16'),
-                    PurePosixPath('r2', 'micromips'),
-                    PurePosixPath('r2', 'micromips', 'dspr2'), 
-                    PurePosixPath('r2', 'dspr2'),
-                    PurePosixPath('r5', 'dspr2'),
-                    PurePosixPath('r5', 'dspr2', 'fpu64'),
-#                    PurePosixPath('r5', 'micromips', 'dspr2'),
-#                    PurePosixPath('r5', 'micromips', 'dspr2', 'fpu64')
-                    ]
-
-def get_mips_multilib_opts(multilib_path):
-    '''Return a string array containing compiler options for a MIPS device based on the given
-    pathlib.Path object representing a multilib path.
-    '''
-    opts = ['-target', 'mipsel-linux-gnu-musl']
-
-    # MIPS32 architecture revision
-    if 'r5' in multilib_path.parts:
-        opts.append('-march=mips32r5')
-    else:
-        opts.append('-march=mips32r2')
-
-    # Compressed instruction set support
-    if 'mips16' in multilib_path.parts:
-        opts.append('-mips16')
-    if 'micromips' in multilib_path.parts:
-        opts.append('-mmicromips')
-
-    # Application-specific Extensions (ASEs); only DSPr2 at this time.
-    if 'dspr2' in multilib_path.parts:
-        opts.append('-mdspr2')
-
-    # FPU
-    if 'fpu64' in multilib_path.parts:
-        opts.append('-mhard-float')
-        opts.append('-mfp64')
-    else:
-        opts.append('-msoft-float')
-
-    # This option prevents libraries from putting small globals into the small data sections. This
-    # is the safest option since an application can control the size threshold with '-G<size>'.
-    opts.append('-G0')
-    opts.append('-fomit-frame-pointer')
-
-    return opts
-
-
-# Notes:
 # -- The M0, M0+, M23, and M3 do not have an FPU.
 # -- The M4 has a 32-bit FPU; the M7 has a 64-bit FPU. These are Armv7em.
 # -- The A5 can have either a normal 64-bit FPU or one with NEON. This is Armv7a.
 # -- The M series is always Thumb, so we do not have to differentiate.
-ARM_MULTLIB_PREFIX = PurePosixPath('target', 'arm', 'lib')
-ARM_MULTILIBS = [PurePosixPath('v6m'),
-                 PurePosixPath('v7m'),
-                 PurePosixPath('v7em'),
-                 PurePosixPath('v7em', 'fpv4-sp-d16'),
-                 PurePosixPath('v7em', 'fpv5-d16'),
-                 PurePosixPath('v8m.base'),
-#                 PurePosixPath('v8m.main'),
-#                 PurePosixPath('v8m.main', 'fpv5-sp-d16'),
-#                 PurePosixPath('v8.1m.main'),
-#                 PurePosixPath('v8.1m.main', 'fp-armv8-fullfp16-d16')
-                 PurePosixPath('v7a'),
-                 PurePosixPath('v7a', 'vfpv4-d16'),
-                 PurePosixPath('v7a', 'neon-vfpv4'),
-                 PurePosixPath('v7a', 'thumb'),
-                 PurePosixPath('v7a', 'thumb', 'vfpv4-d16'),
-                 PurePosixPath('v7a', 'thumb', 'neon-vfpv4')]
+class TargetVariant(NamedTuple):
+    arch : str
+    triple : str
+    path : List[str]
+    options : List[str]
 
-def get_arm_multilib_opts(multilib_path):
-    '''Return a string array containing compiler options for an Arm device based on the given
-    pathlib.Path object representing a multilib path.
+class Mips32Variant(TargetVariant):
+    def __init__(self, multilib_path, options):
+        # '-G0' prevents libraries from putting small globals into the small data sections. This
+        # is the safest option since an application can control the size threshold with '-G<size>'.
+        common_opts = ['-target', 'mipsel-linux-gnu-musl', '-G0', '-fomit-frame-pointer']
+        super.__init__('mips32', 'mipsel-linux-gnu-musl', multilib_path, common_opts + options)
+
+class ArmVariant(TargetVariant):
+    def __init__(self, multilib_path, options):
+        # The '-mimplicit-it' flag is needed for Musl. Whatever options I'm passing are causing the
+        # Musl configure script to not pick that up automatically.
+        common_opts = ['-target', 'arm-none-eabi-musl', '-mimplicit-it=always', '-fomit-frame-pointer']
+        super.__init__('arm', 'arm-none-eabi-musl', multilib_path, common_opts + options)
+
+TARGETS = [
+    Mips32Variant(PurePath('r2'),
+                    ['-march=mips32r2', '-msoft-float']),
+#    Mips32Variant(PurePath('r2/mips16'),
+#                    ['-march=mips32r2', '-mips16', '-msoft-float']),
+    Mips32Variant(PurePath('r2/micromips'),
+                    ['-march=mips32r2', '-mmicromips', '-msoft-float']),
+    Mips32Variant(PurePath('r2/micromips/dspr2'),
+                    ['-march=mips32r2', '-mmicromips', '-mdspr2', '-msoft-float']),
+    Mips32Variant(PurePath('r2/dspr2'),
+                    ['-march=mips32r2', '-mdspr2', '-msoft-float']),
+    Mips32Variant(PurePath('r5/dspr2'),
+                    ['-march=mips32r5', '-mdspr2', '-msoft-float']),
+    Mips32Variant(PurePath('r5/dspr2/fpu64'),
+                    ['-march=mips32r5', '-mdspr2', '-mhard-float', '-mfp64']),
+    Mips32Variant(PurePath('r5/micromips/dspr2'),
+                    ['-march=mips32r5', '-mmicromips', '-mdspr2', '-msoft-float']),
+#    Mips32Variant(PurePath('r5/micromips/dspr2/fpu64'),
+#                    ['-march=mips32r5', '-mmicromips', '-mdspr2', '-mhard-float', '-mfp64']),
+
+    ArmVariant(PurePath('v6m'),
+                ['-march=armv6m', '-msoft-float', '-mfloat-abi=soft']),
+    ArmVariant(PurePath('v7m'),
+                ['-march=armv7m', '-msoft-float', '-mfloat-abi=soft']),
+    ArmVariant(PurePath('v7em'),
+                ['-march=armv7em', '-msoft-float', '-mfloat-abi=soft']),
+    ArmVariant(PurePath('v7em/fpv4-sp-d16'),
+                ['-march=armv7em', '-mfpu=fpv4-sp-d16', '-mfloat-abi=hard']),
+    ArmVariant(PurePath('v7em/fpv5-d16'),
+                ['-march=armv7em', '-mfpu=fpv5-d16', '-mfloat-abi=hard']),
+    ArmVariant(PurePath('v8m.base'),
+                ['-march=armv8m.base', '-msoft-float', '-mfloat-abi=soft']),
+#    ArmVariant(PurePath('v8m.main'),
+#                ['-march=armv8m.main', '-msoft-float', '-mfloat-abi=soft']),
+#    ArmVariant(PurePath('v8m.main/fpv5-sp-d16'),
+#                ['-march=armv8m.main', '-mfpu=fpv5-sp-d16', '-mfloat-abi=hard']),
+#    ArmVariant(PurePath('v8.1m.main'),
+#                ['-march=armv8.1m.main', '-msoft-float', '-mfloat-abi=soft']),
+#    ArmVariant(PurePath('v8.1m.main/fp-armv8-fullfp16-d16'),
+#                ['-march=armv8m.main+mve.fp+fp.dp', '-mfpu=fp-armv8-fullfp16-d16', '-mfloat-abi=hard']),
+    ArmVariant(PurePath('v7a'),
+                ['-march=armv7a', '-msoft-float', '-mfloat-abi=soft']),
+    ArmVariant(PurePath('v7a/vfpv4-d16'),
+                ['-march=armv7em', '-mfpu=vfpv4-d16', '-mfloat-abi=hard']),
+    ArmVariant(PurePath('v7a/neon-vfpv4'),
+                ['-march=armv7em', '-mfpu=neon-vfpv4', '-mfloat-abi=hard']),
+    ArmVariant(PurePath('v7a/thumb'),
+                ['-march=armv7a', '-mthumb', '-msoft-float', '-mfloat-abi=soft']),
+    ArmVariant(PurePath('v7a/thumb/vfpv4-d16'),
+                ['-march=armv7em', '-mthumb', '-mfpu=vfpv4-d16', '-mfloat-abi=hard']),
+    ArmVariant(PurePath('v7a/thumb/neon-vfpv4'),
+                ['-march=armv7em', '-mthumb', '-mfpu=neon-vfpv4', '-mfloat-abi=hard']),
+    ]
+
+def create_build_variants():
+    '''Create a list of build variants that are used to build supporting libraries for the toolchain.
+    
+    This uses the list of targets above and creates new versions that vary by the optimization options
+    to be used. Each target in the list above will therefore have several versions that differ by
+    the optimization options used to build them. Each optimization variant also has its own path
     '''
-    opts = ['-target', 'arm-none-eabi-musl']
+    variants = []
+    opts = [(PurePath('.'),  ['-O0']),
+            (PurePath('o1'), ['-O1']),
+            (PurePath('o2'), ['-O2']),
+            (PurePath('o3'), ['-O3']),
+            (PurePath('os'), ['-Os']),
+            (PurePath('oz'), ['-Oz'])]
 
-    # Architecture name
-    if 'v6m' in multilib_path.parts:
-        opts.append('-march=armv6m')
-    elif 'v7m' in multilib_path.parts:
-        opts.append('-march=armv7m')
-    elif 'v7em' in multilib_path.parts:
-        opts.append('-march=armv7em')
-    elif 'v7a' in multilib_path.parts:
-        opts.append('-march=armv7a')
-    elif 'v8m.base' in multilib_path.parts:
-        opts.append('-march=armv8m.base')
-    elif 'v8m.main' in multilib_path.parts:
-        opts.append('-march=armv8m.main')
-    elif 'v8.1m.main' in multilib_path.parts:
-        if 'fp-armv8-fullfp16-d16' in multilib_path.parts:
-            opts.append('-march=armv8.1m.main+mve.fp+fp.dp')
-        else:
-            opts.append('-march=armv8.1m.main')
+    for target in TARGETS:
+        for opt in opts:
+            variant_path = target.path / opt[0]
+            variant_options = target.options + opts[1]
+            variants.append(TargetVariant(target.arch, target.triple, variant_path, variant_options))
 
-    # Compressed instruction set
-    if 'thumb' in multilib_path.parts:
-        opts.append('-mthumb')
-
-    # FPU name
-    if 'fpv4-sp-d16' in multilib_path.parts:
-        opts.append('-mfpu=fpv4-sp-d16')
-        opts.append('-mfloat-abi=hard')
-    elif 'vfpv4-d16' in multilib_path.parts:
-        opts.append('-mfpu=vfpv4-d16')
-        opts.append('-mfloat-abi=hard')
-    elif 'fpv5-sp-d16' in multilib_path.parts:
-        opts.append('-mfpu=fpv5-sp-d16')
-        opts.append('-mfloat-abi=hard')
-    elif 'fpv5-d16' in multilib_path.parts:
-        opts.append('-mfpu=fpv5-d16')
-        opts.append('-mfloat-abi=hard')
-    elif 'fp-armv8' in multilib_path.parts:
-        opts.append('-mfpu=fp-armv8')
-        opts.append('-mfloat-abi=hard')
-    elif 'fp-armv8-fullfp16-d16' in multilib_path.parts:
-        opts.append('-mfpu=fp-armv8-fullfp16-d16')
-        opts.append('-mfloat-abi=hard')
-    elif 'neon-vfpv4' in multilib_path.parts:
-        opts.append('-mfpu=neon-vfpv4')
-        opts.append('-mfloat-abi=hard')
-    else:
-        opts.append('-msoft-float')
-        opts.append('-mfloat-abi=soft')
-
-    opts.append('-fomit-frame-pointer')
-    opts.append('-mimplicit-it=always')
-
-    return opts
+    return variants
 
 
-OPTIMIZATION_MULTILIBS = [PurePosixPath('.'),
-                          PurePosixPath('o1'),
-                          PurePosixPath('o2'),
-                          PurePosixPath('o3'),
-                          PurePosixPath('os'),
-                          PurePosixPath('oz')]
+def remake_dirs(dir):
+    '''Remove and make the given directory and its subdirectories.
+    
+    Use this to remove build directories so that a clean build is done.'''
+    if os.path.exists(dir):
+        shutil.rmtree(dir)
 
-def get_optimization_multilib_opts(multilib_path):
-    '''Return a string array containing optimization options based on the given pathlib.Path object
-    representing a multilib path.
-    '''
-    opts = []
-
-    if 'o1' in multilib_path.parts:
-        opts.append('-O1')
-    elif 'o2' in multilib_path.parts:
-        opts.append('-O2')
-    elif 'o3' in multilib_path.parts:
-        opts.append('-O3')
-    elif 'os' in multilib_path.parts:
-        opts.append('-Os')
-    elif 'oz' in multilib_path.parts:
-        opts.append('-Oz')
-    else:
-        opts.append('-O0')
-
-    return opts
+    os.makedirs(dir)
 
 
-def build_llvm():
-    '''Build LLVM and its associated projects.
+def build_single_stage_llvm():
+    '''Build LLVM and its associated projects as a single-stage build.
 
     This will remove any previous build directory so that a clean build is always performed. To
     avoid this, enter the directory using a command line and manually start a build from there.
     '''
-    llvm_build_dir = BUILD_PREFIX / 'llvm'
-    llvm_install_dir = os.path.relpath(INSTALL_PREFIX, llvm_build_dir)
-    llvm_src_dir = os.path.relpath(LLVM_WORKING_DIR / 'llvm', llvm_build_dir)
-    llvm_cmake_config_path = os.path.relpath(CMAKE_CACHE_DIR / 'pic32clang-llvm-stage1.cmake',
-                                             llvm_build_dir)
+    build_dir = BUILD_PREFIX / 'llvm'
+    install_dir = os.path.relpath(INSTALL_PREFIX, build_dir)
+    src_dir = os.path.relpath(LLVM_SRC_DIR / 'llvm', build_dir)
 
-    if os.path.exists(llvm_build_dir):
-        shutil.rmtree(llvm_build_dir)
+    remake_dirs(build_dir)
 
-    os.makedirs(llvm_build_dir)
+    gen_build_cmd = ['cmake', '-G', 'Ninja',
+                     '-DCMAKE_INSTALL_PREFIX=' + install_dir,
+                     '-DCMAKE_BUILD_TYPE=Debug',
+                     '-DCMAKE_C_FLAGS_DEBUG="-O1 -g"',
+                     '-DCMAKE_CXX_FLAGS_DEBUG="-O1 -g"',
+                     '-DLLVM_ENABLE_LTO=OFF',
+                     '-DLLVM_OPTIMIZED_TABLEGEN=ON',
+                     '-DLLVM_USE_SPLIT_DWARF=ON',
+                     '-DLLVM_TARGETS_TO_BUILD=ARM;Mips',
+                     '-DLLVM_ENABLE_PROJECTS=clang;clang-tools-extra;lld;lldb;polly',
+                     src_dir]
+    run_subprocess(gen_build_cmd, 'Generate LLVM build script', build_dir)
+
+    build_cmd = ['cmake', '--build', '.', '--target', 'stage2-distribution']
+    run_subprocess(build_cmd, 'Build LLVM', build_dir)
+
+    install_cmd = ['cmake', '--build', '.', '--target', 'stage2-install-distribution']
+    run_subprocess(install_cmd, 'Install LLVM', build_dir)
+
+
+def build_two_stage_llvm():
+    '''Build LLVM and its associated projects using a 2-stage build.
+
+    This will remove any previous build directory so that a clean build is always performed. To
+    avoid this, enter the directory using a command line and manually start a build from there.
+    '''
+    build_dir = BUILD_PREFIX / 'llvm'
+    install_dir = os.path.relpath(INSTALL_PREFIX, build_dir)
+    src_dir = os.path.relpath(LLVM_SRC_DIR / 'llvm', build_dir)
+    cmake_config_path = os.path.relpath(CMAKE_CACHE_DIR / 'pic32clang-llvm-stage1.cmake',
+                                             build_dir)
+
+    remake_dirs(build_dir)
 
     ######
     # The CMake cache files used here are based on the example configs found in
@@ -409,41 +391,87 @@ def build_llvm():
     #
     # TODO: Can the DEFAULT_SYSROOT option be set such that it is always relative to the executables?
     #       It looks like setting it to ".." might make it relative to where the "bin/" directory is.
+    # TODO: There's a CMake variable called PACKAGE_VENDOR that could hold pic32Clang version info.
+    #       There's also PACKAGE_VERSION, but that appears to have LLVM's version in it.
+    #       Do I need something like this for Musl?
     gen_build_cmd = ['cmake', '-G', 'Ninja',
-                     '-DCMAKE_INSTALL_PREFIX=' + llvm_install_dir,
+                     '-DCMAKE_INSTALL_PREFIX=' + install_dir,
                      '-DBOOTSTRAP_LLVM_ENABLE_LTO=OFF',
-                     '-DBOOTSTRAP_CMAKE_BUILD_TYPE=Debug',
-    #                 '-DBOOTSTRAP_CMAKE_BUILD_TYPE=RelWithDebInfo',
-                     '-C', llvm_cmake_config_path,
-                     llvm_src_dir]
-    run_subprocess(gen_build_cmd, 'Generate LLVM build script', llvm_build_dir)
+                     '-DBOOTSTRAP_CMAKE_BUILD_TYPE=RelWithDebInfo',
+                     '-C', cmake_config_path,
+                     src_dir]
+    run_subprocess(gen_build_cmd, 'Generate LLVM build script', build_dir)
 
-    build_llvm_cmd = ['cmake', '--build', '.', '--target', 'stage2-distribution']
-    run_subprocess(build_llvm_cmd, 'Build LLVM', llvm_build_dir)
+    build_cmd = ['cmake', '--build', '.', '--target', 'stage2-distribution']
+    run_subprocess(build_cmd, 'Build LLVM', build_dir)
 
-    install_llvm_cmd = ['cmake', '--build', '.', '--target', 'stage2-install-distribution']
-    run_subprocess(install_llvm_cmd, 'Install LLVM', llvm_build_dir)
+    install_cmd = ['cmake', '--build', '.', '--target', 'stage2-install-distribution']
+    run_subprocess(install_cmd, 'Install LLVM', build_dir)
 
 
-def build_musl():
-    '''Build the Musl C library for the targets.
+def get_lib_build_dir(libname, variant):
+    '''Get a path relative to this script at which a library build will be performed.
 
-    This needs to be called after LLVM itself has been built because this needs LLVM to build Musl.
-    Musl is just one library, but for compatibility with other C libraries Musl will build empty
-    versions of libm, libpthread, and a few others. 
+    The path created depends on the path value in the given variant so that each variant has its own
+    build directory.
     '''
-    musl_build_dir = BUILD_PREFIX / 'musl'
-    musl_install_dir = os.path.relpath(INSTALL_PREFIX / 'musl', musl_build_dir)
-    musl_src_dir = os.path.relpath(MUSL_WORKING_DIR, musl_build_dir)
+    return BUILD_PREFIX / libname / variant.arch / variant.path
 
-    clang_c_path = os.path.abspath(INSTALL_PREFIX / 'bin' / 'clang')
-    llvm_ar_path = os.path.abspath(INSTALL_PREFIX / 'bin' / 'llvm-ar')
-    llvm_ranlib_path = os.path.abspath(INSTALL_PREFIX / 'bin' / 'llvm-ranlib')
 
-    if os.path.exists(musl_build_dir):
-        shutil.rmtree(musl_build_dir)
+def get_lib_install_dir(variant):
+    '''Get a path relative to this script at which libraries are installed.
+    
+    The path created depends on the path value in the given variant so that each variant has its own
+    install directory for its libraries. All libraries for that variant are at the same path.
+    '''
+    return INSTALL_PREFIX / 'target' / variant.arch / 'lib' / variant.path
 
-    os.makedirs(musl_build_dir)
+
+def get_lib_include_dir(variant):
+    '''Get a path relative to this script at which library includes will be located.
+    
+    Includes are architecture-specific (ie. MIPS vs ARM), but not option-specific. That is, there
+    is not a separate include path for every target variant.
+    '''
+    return INSTALL_PREFIX / 'target' / variant.arch
+
+
+def get_lib_info_str(variant):
+    '''Get a string that can be printed to the console to indicate what variant is being built.
+    '''
+    return str(variant.arch / variant.path)
+
+
+def get_lib_build_tool_path():
+    '''Get the path relative to this script at which a built LLVM/Clang toolchain suitable for
+    building the libraries in this script is located.
+    
+    This returns the top-level directory for the toolchain--that is, the path at which the bin/,
+    lib/, and so on directories are located. This will use the stage 2 build location if able because
+    the LLVM libraries make use of CMake caches and other build items in that location rather than 
+    the final install location.
+    '''
+    if SINGLE_STAGE_LLVM:
+        return BUILD_PREFIX / 'llvm'
+    else:
+        return BUILD_PREFIX / 'llvm' / 'tools' / 'clang' / 'stage2-bins'
+
+
+def build_musl(variant):
+    '''Build the Musl C library for a single variant.
+
+    Build the Musl library for the given target variant using its build options. The build and install
+    paths are determined by the path provided by the variant. This needs to be called after LLVM 
+    itself has been built because this needs LLVM to build Musl. Musl is just one library, but for 
+    compatibility with other C libraries Musl will build empty versions of libm, libpthread, and a 
+    few others. 
+    '''
+    build_dir = get_lib_build_dir('musl', variant)
+    install_dir = os.path.relpath(get_lib_install_dir(variant), build_dir)
+    src_dir = os.path.relpath(MUSL_SRC_DIR, build_dir)
+    include_dir = os.path.relpath(get_lib_include_dir(variant), build_dir)
+
+    remake_dirs(build_dir)
 
     num_cpus = os.cpu_count()
     if None == num_cpus or num_cpus < 1:
@@ -462,134 +490,121 @@ def build_musl():
     # --For Armv7(E)-M and Armv8M/8.1M Mainline, Clang defines both __thumb__ and __thumb2__.
     # --For Armv6-M and Armv8-M.base, only __thumb__ is defined.
 
-    musl_env = os.environ.copy()
-    musl_env['AR'] = llvm_ar_path
-    musl_env['RANLIB'] = llvm_ranlib_path
-    musl_env['CC'] = clang_c_path
+    build_env = os.environ.copy()
+    build_env['AR'] = os.path.abspath(get_lib_build_tool_path() / 'bin' / 'llvm-ar')
+    build_env['RANLIB'] = os.path.abspath(get_lib_build_tool_path() / 'bin' / 'llvm-ranlib')
+    build_env['CC'] = os.path.abspath(get_lib_build_tool_path() / 'bin' / 'clang')
+    build_env['CFLAGS'] = ' '.join(variant.options) + ' -gline-tables-only'
 
-    for mips_ml in MIPS32_MULTILIBS:
-        multilib_opts = ' '.join(get_mips_multilib_opts(mips_ml))
+# TODO: Does this need to specify a custom version string since this is my branch of Musl?
+    gen_build_cmd = [src_dir + '/configure', 
+                    '--prefix=' + install_dir,
+                    '--libdir=' + install_dir,
+                    '--includedir=' + include_dir,
+                    '--disable-shared',
+                    '--disable-wrapper',
+                    '--disable-optimize',
+                    '--disable-debug',
+                    '--target=' + variant.triple]
+    gen_build_info = 'Configure Musl (' + get_lib_info_str(variant) + ')'
+    run_subprocess(gen_build_cmd, gen_build_info, build_dir, penv=build_env)
 
-        for opt_ml in OPTIMIZATION_MULTILIBS:
-            multilib_str = str('mips32' / mips_ml / opt_ml)
-            prefix_str = str(PurePosixPath(musl_install_dir, multilib_str))
-            optimization_opts = ' '.join(get_optimization_multilib_opts(opt_ml))
+    clean_cmd = ['make', 'clean']
+    clean_info = 'Clean Musl (' + get_lib_info_str(variant) + ')'
+    run_subprocess(clean_cmd, clean_info, build_dir, penv=build_env)
 
-            musl_env['CFLAGS'] = multilib_opts + ' ' + optimization_opts
+    build_cmd = ['make', '-j' + str(num_cpus)]
+    build_info = 'Build Musl (' + get_lib_info_str(variant) + ')'
+    run_subprocess(build_cmd, build_info, build_dir, penv=build_env)
 
-# TODO: This needs to specify the '--includedir' and '--libdir' options (and maybe others, check Configure)
-#       to put files where we really want them.
-            gen_build_cmd = [musl_src_dir + '/configure', 
-                            '--prefix=' + prefix_str,
-                            '--disable-shared',
-                            '--disable-wrapper',
-                            '--disable-optimize',
-                            '--enable-debug',
-                            '--target=mipsel-linux-gnu-musl']
-            gen_build_info = 'Configure Musl (' + multilib_str + ')'
-            run_subprocess(gen_build_cmd, gen_build_info, musl_build_dir, penv=musl_env)
-
-            clean_musl_cmd = ['make', 'clean']
-            clean_musl_info = 'Clean Musl (' + multilib_str + ')'
-            run_subprocess(clean_musl_cmd, clean_musl_info, musl_build_dir, penv=musl_env)
-
-            build_musl_cmd = ['make', '-j' + str(num_cpus)]
-            build_musl_info = 'Build Musl (' + multilib_str + ')'
-            run_subprocess(build_musl_cmd, build_musl_info, musl_build_dir, penv=musl_env)
-
-            install_musl_cmd = ['make', '-j1', 'install']
-            install_musl_info = 'Install Musl (' + multilib_str + ')'
-            run_subprocess(install_musl_cmd, install_musl_info, musl_build_dir, penv=musl_env)
-        
-    for arm_ml in ARM_MULTILIBS:
-        multilib_opts = ' '.join(get_arm_multilib_opts(arm_ml))
-
-        for opt_ml in OPTIMIZATION_MULTILIBS:
-            multilib_str = str('arm' / arm_ml / opt_ml)
-            prefix_str = str(PurePosixPath(musl_install_dir, multilib_str))
-            optimization_opts = ' '.join(get_optimization_multilib_opts(opt_ml))
-
-            musl_env['CFLAGS'] = multilib_opts + ' ' + optimization_opts
-
-            gen_build_cmd = [musl_src_dir + '/configure', 
-                            '--prefix=' + prefix_str,
-                            '--disable-shared',
-                            '--disable-wrapper',
-                            '--disable-optimize',
-                            '--enable-debug',
-                            '--target=arm-none-eabi-musl']
-            gen_build_info = 'Configure Musl (' + multilib_str + ')'
-            run_subprocess(gen_build_cmd, gen_build_info, musl_build_dir, penv=musl_env)
-
-            clean_musl_cmd = ['make', 'clean']
-            clean_musl_info = 'Clean Musl (' + multilib_str + ')'
-            run_subprocess(clean_musl_cmd, clean_musl_info, musl_build_dir, penv=musl_env)
-
-            build_musl_cmd = ['make', '-j' + str(num_cpus)]
-            build_musl_info = 'Build Musl (' + multilib_str + ')'
-            run_subprocess(build_musl_cmd, build_musl_info, musl_build_dir, penv=musl_env)
-
-            install_musl_cmd = ['make', '-j1', 'install']
-            install_musl_info = 'Install Musl (' + multilib_str + ')'
-            run_subprocess(install_musl_cmd, install_musl_info, musl_build_dir, penv=musl_env)
+    install_cmd = ['make', '-j1', 'install']
+    install_info = 'Install Musl (' + get_lib_info_str(variant) + ')'
+    run_subprocess(install_cmd, install_info, build_dir, penv=build_env)
 
 
-def build_llvm_runtimes():
-    '''Build LLVM runtime libraries for the targets.
+def build_llvm_builtins(variant):
+    '''Build the LLVM builtins library for a single build variant.
 
-    This needs to be called after LLVM itself has been built because this needs LLVM to build the
-    target libraries.
+    Build the portion of Compiler-RT that contains built-in functions for the given build variant 
+    using its build options. These are functions that can be called from anywhere and start with
+    "__builtin_". The build and install paths of the libraries are determined by 
+    the path provided by the variant. This needs to be called after LLVM has been built.
     '''
-    musl_include_path = os.path.abspath(INSTALL_PREFIX / 'musl' / 'mips32' / 'r2' / 'include')
+    build_dir = get_lib_build_dir('builtins', variant)
+    install_dir = os.path.relpath(get_lib_install_dir(variant), build_dir)
+    src_dir = os.path.relpath(LLVM_SRC_DIR / 'llvm' / 'runtimes', build_dir)
 
-    # Use the stage2 compiler location instead of the final install location because this has
-    # llvm-config and all the CMake cache files it looks for to determine how to build libraries.
-    compiler_prefix = BUILD_PREFIX / 'llvm' / 'tools' / 'clang' / 'stage2-bins'
+    clang_sysroot = os.path.abspath(get_lib_build_tool_path())
+    musl_include_path = os.path.abspath(get_lib_include_dir(variant))
+    cmake_config_path = os.path.relpath(CMAKE_CACHE_DIR / 'pic32clang-target-builtins.cmake',
+                                             build_dir)
 
-    clang_sysroot = os.path.abspath(compiler_prefix)
-
-    rt_flags = [
-                '-march=mips32r2',
-                '-msoft-float',
-                '-G0',
-                '-fomit-frame-pointer',
-               ]
-
-    rt_build_dir = BUILD_PREFIX / 'runtimes'
-    rt_src_dir = os.path.relpath(LLVM_WORKING_DIR / 'llvm' / 'runtimes', rt_build_dir)
-    rt_install_prefix = os.path.abspath(INSTALL_PREFIX / 'runtimes')
-    multilib_str = 'mips32/r2'
-    target_triple = 'mipsel-linux-gnu-musl'
-
-    rt_cmake_config_path = os.path.relpath(CMAKE_CACHE_DIR / 'pic32clang-target-runtimes.cmake',
-                                             rt_build_dir)
-
-    if os.path.exists(rt_build_dir):
-        shutil.rmtree(rt_build_dir)
-
-    os.makedirs(rt_build_dir)
+    remake_dirs(build_dir)
 
     # TODO: Enable LTO and figure out if LTO libraries can be used in non-LTO builds.
     gen_build_cmd = ['cmake', '-G', 'Ninja', 
-                     '-DCMAKE_INSTALL_PREFIX=\'' + rt_install_prefix + '\'',
-                     '-DPIC32CLANG_TARGET_TRIPLE=' + target_triple,
-                     '-DPIC32CLANG_RUNTIME_FLAGS=' + ';'.join(rt_flags),
+                     '-DCMAKE_INSTALL_PREFIX=\'' + install_dir + '\'',
+                     '-DPIC32CLANG_TARGET_TRIPLE=' + variant.triple,
+                     '-DPIC32CLANG_RUNTIME_FLAGS=' + ';'.join(variant.options),
                      '-DPIC32CLANG_MUSL_INCLUDES=\'' + musl_include_path + '\'',
                      '-DPIC32CLANG_SYSROOT=\'' + clang_sysroot + '\'',
-                     '-C', rt_cmake_config_path,
-                     rt_src_dir]
-    run_subprocess(gen_build_cmd, 'Generate runtimes build script (' + multilib_str + ')', rt_build_dir)
+                     '-C', cmake_config_path,
+                     src_dir]
+    gen_build_info = 'Generate builtins build script (' + get_lib_info_str(variant) + ')'
+    run_subprocess(gen_build_cmd, gen_build_info, build_dir)
+
+    build_cmd = ['cmake', '--build', '.']
+    build_info = 'Build builtins (' + get_lib_info_str(variant) + ')'
+    run_subprocess(build_cmd, build_info, build_dir)
+
+    install_cmd = ['cmake', '--build', '.', '--target', 'install']
+    install_info = 'Install builtins (' + get_lib_info_str(variant) + ')'
+    run_subprocess(install_cmd, install_info, build_dir)
+
+
+def build_llvm_runtimes(variant):
+    '''Build LLVM runtime libraries for a single build variant.
+
+    Build libc++, libc++abi, libunwind, and the non-builtin parts of Compiler-RT for the given build
+    variant using its build options. The build and install paths of the libraries are determined by 
+    the path provided by the variant. This needs to be called after LLVM itself, the built-in 
+    functions from Compiler-RT, and Musl have been built.
+    '''
+    build_dir = get_lib_build_dir('runtimes', variant)
+    install_dir = os.path.relpath(get_lib_install_dir(variant), build_dir)
+    src_dir = os.path.relpath(LLVM_SRC_DIR / 'llvm' / 'runtimes', build_dir)
+
+    clang_sysroot = os.path.abspath(get_lib_build_tool_path())
+    musl_include_path = os.path.abspath(get_lib_include_dir(variant))
+    cmake_config_path = os.path.relpath(CMAKE_CACHE_DIR / 'pic32clang-target-runtimes.cmake',
+                                             build_dir)
+
+    remake_dirs(build_dir)
+
+    # TODO: Enable LTO and figure out if LTO libraries can be used in non-LTO builds.
+    gen_build_cmd = ['cmake', '-G', 'Ninja', 
+                     '-DCMAKE_INSTALL_PREFIX=\'' + install_dir + '\'',
+                     '-DPIC32CLANG_TARGET_TRIPLE=' + variant.triple,
+                     '-DPIC32CLANG_RUNTIME_FLAGS=' + ';'.join(variant.options),
+                     '-DPIC32CLANG_MUSL_INCLUDES=\'' + musl_include_path + '\'',
+                     '-DPIC32CLANG_SYSROOT=\'' + clang_sysroot + '\'',
+                     '-C', cmake_config_path,
+                     src_dir]
+    gen_build_info = 'Generate runtimes build script (' + get_lib_info_str(variant) + ')'
+    run_subprocess(gen_build_cmd, gen_build_info, build_dir)
 
     # Generate and install the C++ headers first because libcxxabi will need them.
     install_cxx_headers_cmd = ['cmake', '--build', '.', '--target', 'install-cxx-headers']
-    run_subprocess(install_cxx_headers_cmd, 'Generate C++ Headers (' + multilib_str + ')', rt_build_dir)
+    install_cxx_headter_info = 'Generate C++ Headers (' + get_lib_info_str(variant) + ')'
+    run_subprocess(install_cxx_headers_cmd, install_cxx_headter_info, build_dir)
 
-    build_rt_cmd = ['cmake', '--build', '.']
-    run_subprocess(build_rt_cmd, 'Build runtimes (' + multilib_str + ')', rt_build_dir)
+    build_cmd = ['cmake', '--build', '.']
+    build_info = 'Build runtimes (' + get_lib_info_str(variant) + ')'
+    run_subprocess(build_cmd, build_info, build_dir)
 
-    install_rt_cmd = ['cmake', '--build', '.', '--target', 'install']
-    run_subprocess(install_rt_cmd, 'Install runtimes (' + multilib_str + ')', rt_build_dir)
-
+    install_cmd = ['cmake', '--build', '.', '--target', 'install']
+    install_info = 'Install runtimes (' + get_lib_info_str(variant) + ')'
+    run_subprocess(install_cmd, install_info, build_dir)
 
 
 # This is true when this file is executed as a script rather than imported into another file.  We
@@ -601,17 +616,20 @@ if '__main__' == __name__:
     if is_windows():
         subprocess.call('', shell=True)
 
-    clone_from_git(LLVM_REPO_URL, LLVM_RELEASE_BRANCH, LLVM_WORKING_DIR, skip_if_exists=True)
-    clone_from_git(MUSL_REPO_URL, MUSL_RELEASE_BRANCH, MUSL_WORKING_DIR, skip_if_exists=True)
+    clone_from_git(LLVM_REPO_URL, LLVM_RELEASE_BRANCH, LLVM_SRC_DIR, skip_if_exists=True)
+    clone_from_git(MUSL_REPO_URL, MUSL_RELEASE_BRANCH, MUSL_SRC_DIR, skip_if_exists=True)
 
-    #print("\n*****\nBUILD LLVM COMMENTED OUT\n*****\n")
-    build_llvm()
+    #print('\n*****\nBUILD LLVM COMMENTED OUT\n*****\n')
+    if SINGLE_STAGE_LLVM:
+        build_single_stage_llvm()
+    else:
+        build_two_stage_llvm()
 
-    #print("\n*****\nBUILD MUSL COMMENTED OUT\n*****\n")
-    #build_musl()
-
-    #print("\n*****\nBUILD RUNTIMES COMMENTED OUT\n*****\n")
-    #build_llvm_runtimes()
+    build_variants = create_build_variants()
+    for variant in build_variants:
+            build_musl(variant)
+            build_llvm_builtins(variant)
+            build_llvm_runtimes(variant)
 
     # Do this extra print because otherwise the info string will be below where the command prompt
     # re-appears after this ends.
