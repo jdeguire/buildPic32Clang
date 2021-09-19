@@ -364,10 +364,10 @@ def build_single_stage_llvm():
                      src_dir]
     run_subprocess(gen_build_cmd, 'Generate LLVM build script', build_dir)
 
-    build_cmd = ['cmake', '--build', '.', '--target', 'stage2-distribution']
+    build_cmd = ['cmake', '--build', '.', '--target', 'distribution']
     run_subprocess(build_cmd, 'Build LLVM', build_dir)
 
-    install_cmd = ['cmake', '--build', '.', '--target', 'stage2-install-distribution']
+    install_cmd = ['cmake', '--build', '.', '--target', 'install-distribution']
     run_subprocess(install_cmd, 'Install LLVM', build_dir)
 
 
