@@ -228,22 +228,28 @@ def clone_from_git(url, branch=None, dest_directory=None, skip_if_exists=False):
 class TargetVariant(NamedTuple):
     arch : str
     triple : str
-    path : List[str]
+    path : PurePath
     options : List[str]
 
 class Mips32Variant(TargetVariant):
-    def __init__(self, multilib_path, options):
+    # This stops a __dict__ dictionary from being created and reduces memory usage. The Python docs
+    # for NamedTuple breifly mentions this.
+    __slots__ = ()
+
+    def __new__(cls, multilib_path, options):
         # '-G0' prevents libraries from putting small globals into the small data sections. This
         # is the safest option since an application can control the size threshold with '-G<size>'.
         common_opts = ['-target', 'mipsel-linux-gnu-musl', '-G0', '-fomit-frame-pointer']
-        super.__init__('mips32', 'mipsel-linux-gnu-musl', multilib_path, common_opts + options)
+        super().__new__(cls, 'mips32', 'mipsel-linux-gnu-musl', multilib_path, common_opts + options)
 
 class ArmVariant(TargetVariant):
-    def __init__(self, multilib_path, options):
+    __slots__ = ()
+
+    def __new__(cls, multilib_path, options):
         # The '-mimplicit-it' flag is needed for Musl. Whatever options I'm passing are causing the
         # Musl configure script to not pick that up automatically.
         common_opts = ['-target', 'arm-none-eabi-musl', '-mimplicit-it=always', '-fomit-frame-pointer']
-        super.__init__('arm', 'arm-none-eabi-musl', multilib_path, common_opts + options)
+        super().__new__(cls, 'arm', 'arm-none-eabi-musl', multilib_path, common_opts + options)
 
 TARGETS = [
     Mips32Variant(PurePath('r2'),
