@@ -60,7 +60,7 @@ from typing import NamedTuple
 from typing import List
 
 PIC32_CLANG_VERSION = '0.01'
-SINGLE_STAGE_LLVM = True
+SINGLE_STAGE_LLVM = False
 
 # Note that '/' is an operator for stuff in pathlib that joins path segments.
 ROOT_WORKING_DIR = PurePath('./pic32clang')
@@ -68,7 +68,8 @@ BUILD_PREFIX = ROOT_WORKING_DIR / 'build'
 INSTALL_PREFIX = ROOT_WORKING_DIR / 'install'
 
 LLVM_REPO_URL = 'https://github.com/llvm/llvm-project.git'
-LLVM_RELEASE_BRANCH = 'llvmorg-11.0.1'
+#LLVM_RELEASE_BRANCH = 'llvmorg-11.0.1'
+LLVM_RELEASE_BRANCH = ''
 LLVM_SRC_DIR = ROOT_WORKING_DIR / 'llvm'
 
 # Use my clone of Musl for now because it will contain mods to get it to work
@@ -232,24 +233,18 @@ class TargetVariant(NamedTuple):
     options : List[str]
 
 class Mips32Variant(TargetVariant):
-    # This stops a __dict__ dictionary from being created and reduces memory usage. The Python docs
-    # for NamedTuple breifly mentions this.
-    __slots__ = ()
-
     def __new__(cls, multilib_path, options):
         # '-G0' prevents libraries from putting small globals into the small data sections. This
         # is the safest option since an application can control the size threshold with '-G<size>'.
         common_opts = ['-target', 'mipsel-linux-gnu-musl', '-G0', '-fomit-frame-pointer']
-        super().__new__(cls, 'mips32', 'mipsel-linux-gnu-musl', multilib_path, common_opts + options)
+        return super().__new__(cls, 'mips32', 'mipsel-linux-gnu-musl', multilib_path, common_opts + options)
 
 class ArmVariant(TargetVariant):
-    __slots__ = ()
-
     def __new__(cls, multilib_path, options):
         # The '-mimplicit-it' flag is needed for Musl. Whatever options I'm passing are causing the
         # Musl configure script to not pick that up automatically.
         common_opts = ['-target', 'arm-none-eabi-musl', '-mimplicit-it=always', '-fomit-frame-pointer']
-        super().__new__(cls, 'arm', 'arm-none-eabi-musl', multilib_path, common_opts + options)
+        return super().__new__(cls, 'arm', 'arm-none-eabi-musl', multilib_path, common_opts + options)
 
 TARGETS = [
     Mips32Variant(PurePath('r2'),
@@ -323,7 +318,7 @@ def create_build_variants():
     for target in TARGETS:
         for opt in opts:
             variant_path = target.path / opt[0]
-            variant_options = target.options + opts[1]
+            variant_options = target.options + opt[1]
             variants.append(TargetVariant(target.arch, target.triple, variant_path, variant_options))
 
     return variants
@@ -354,8 +349,8 @@ def build_single_stage_llvm():
     gen_build_cmd = ['cmake', '-G', 'Ninja',
                      '-DCMAKE_INSTALL_PREFIX=' + install_dir,
                      '-DCMAKE_BUILD_TYPE=Debug',
-                     '-DCMAKE_C_FLAGS_DEBUG="-O1 -g"',
-                     '-DCMAKE_CXX_FLAGS_DEBUG="-O1 -g"',
+                     '-DCMAKE_C_FLAGS_DEBUG=-O1 -g',
+                     '-DCMAKE_CXX_FLAGS_DEBUG=-O1 -g',
                      '-DLLVM_ENABLE_LTO=OFF',
                      '-DLLVM_OPTIMIZED_TABLEGEN=ON',
                      '-DLLVM_USE_SPLIT_DWARF=ON',
@@ -364,10 +359,10 @@ def build_single_stage_llvm():
                      src_dir]
     run_subprocess(gen_build_cmd, 'Generate LLVM build script', build_dir)
 
-    build_cmd = ['cmake', '--build', '.', '--target', 'distribution']
+    build_cmd = ['cmake', '--build', '.']
     run_subprocess(build_cmd, 'Build LLVM', build_dir)
 
-    install_cmd = ['cmake', '--build', '.', '--target', 'install-distribution']
+    install_cmd = ['cmake', '--build', '.', '--target', 'install']
     run_subprocess(install_cmd, 'Install LLVM', build_dir)
 
 
@@ -389,8 +384,6 @@ def build_two_stage_llvm():
     # The CMake cache files used here are based on the example configs found in
     # llvm/clang/cmake/caches that build a 2-stage distribution of LLVM/Clang. The 'stage1' cache
     # file already references the 'stage2' file, so we don't need to do anything with 'stage2' here.
-    # The commented-out lines here contain all of the projects, but we'll start with what the
-    # examples had.
     #
     # NOTE: By default, the CMake cache files build the stage2 compiler with LTO. This takes forever
     # and is not important for testing, so the below command disables it for now.
@@ -424,23 +417,11 @@ def get_lib_build_dir(libname, variant):
     return BUILD_PREFIX / libname / variant.arch / variant.path
 
 
-def get_lib_install_dir(variant):
-    '''Get a path relative to this script at which libraries are installed.
-    
-    The path created depends on the path value in the given variant so that each variant has its own
-    install directory for its libraries. All libraries for that variant are at the same path.
-    '''
-    return INSTALL_PREFIX / 'target' / variant.arch / 'lib' / variant.path
-
-
-def get_lib_include_dir(variant):
-    '''Get a path relative to this script at which library includes will be located.
-    
-    Includes are architecture-specific (ie. MIPS vs ARM), but not option-specific. That is, there
-    is not a separate include path for every target variant.
+def get_lib_install_prefix(variant):
+    '''Get a path relative to this script that would be used as the "prefix" path for installing the
+    libraries.
     '''
     return INSTALL_PREFIX / 'target' / variant.arch
-
 
 def get_lib_info_str(variant):
     '''Get a string that can be printed to the console to indicate what variant is being built.
@@ -473,9 +454,10 @@ def build_musl(variant):
     few others. 
     '''
     build_dir = get_lib_build_dir('musl', variant)
-    install_dir = os.path.relpath(get_lib_install_dir(variant), build_dir)
+    prefix = get_lib_install_prefix(variant)
+    prefix_dir = os.path.relpath(prefix, build_dir)
+    lib_dir = os.path.relpath(prefix / 'lib' / variant.path, build_dir)
     src_dir = os.path.relpath(MUSL_SRC_DIR, build_dir)
-    include_dir = os.path.relpath(get_lib_include_dir(variant), build_dir)
 
     remake_dirs(build_dir)
 
@@ -504,9 +486,8 @@ def build_musl(variant):
 
 # TODO: Does this need to specify a custom version string since this is my branch of Musl?
     gen_build_cmd = [src_dir + '/configure', 
-                    '--prefix=' + install_dir,
-                    '--libdir=' + install_dir,
-                    '--includedir=' + include_dir,
+                    '--prefix=' + prefix_dir,
+                    '--libdir=' + lib_dir,
                     '--disable-shared',
                     '--disable-wrapper',
                     '--disable-optimize',
@@ -528,46 +509,6 @@ def build_musl(variant):
     run_subprocess(install_cmd, install_info, build_dir, penv=build_env)
 
 
-def build_llvm_builtins(variant):
-    '''Build the LLVM builtins library for a single build variant.
-
-    Build the portion of Compiler-RT that contains built-in functions for the given build variant 
-    using its build options. These are functions that can be called from anywhere and start with
-    "__builtin_". The build and install paths of the libraries are determined by 
-    the path provided by the variant. This needs to be called after LLVM has been built.
-    '''
-    build_dir = get_lib_build_dir('builtins', variant)
-    install_dir = os.path.relpath(get_lib_install_dir(variant), build_dir)
-    src_dir = os.path.relpath(LLVM_SRC_DIR / 'llvm' / 'runtimes', build_dir)
-
-    clang_sysroot = os.path.abspath(get_lib_build_tool_path())
-    musl_include_path = os.path.abspath(get_lib_include_dir(variant))
-    cmake_config_path = os.path.relpath(CMAKE_CACHE_DIR / 'pic32clang-target-builtins.cmake',
-                                             build_dir)
-
-    remake_dirs(build_dir)
-
-    # TODO: Enable LTO and figure out if LTO libraries can be used in non-LTO builds.
-    gen_build_cmd = ['cmake', '-G', 'Ninja', 
-                     '-DCMAKE_INSTALL_PREFIX=\'' + install_dir + '\'',
-                     '-DPIC32CLANG_TARGET_TRIPLE=' + variant.triple,
-                     '-DPIC32CLANG_RUNTIME_FLAGS=' + ';'.join(variant.options),
-                     '-DPIC32CLANG_MUSL_INCLUDES=\'' + musl_include_path + '\'',
-                     '-DPIC32CLANG_SYSROOT=\'' + clang_sysroot + '\'',
-                     '-C', cmake_config_path,
-                     src_dir]
-    gen_build_info = 'Generate builtins build script (' + get_lib_info_str(variant) + ')'
-    run_subprocess(gen_build_cmd, gen_build_info, build_dir)
-
-    build_cmd = ['cmake', '--build', '.']
-    build_info = 'Build builtins (' + get_lib_info_str(variant) + ')'
-    run_subprocess(build_cmd, build_info, build_dir)
-
-    install_cmd = ['cmake', '--build', '.', '--target', 'install']
-    install_info = 'Install builtins (' + get_lib_info_str(variant) + ')'
-    run_subprocess(install_cmd, install_info, build_dir)
-
-
 def build_llvm_runtimes(variant):
     '''Build LLVM runtime libraries for a single build variant.
 
@@ -577,32 +518,28 @@ def build_llvm_runtimes(variant):
     functions from Compiler-RT, and Musl have been built.
     '''
     build_dir = get_lib_build_dir('runtimes', variant)
-    install_dir = os.path.relpath(get_lib_install_dir(variant), build_dir)
-    src_dir = os.path.relpath(LLVM_SRC_DIR / 'llvm' / 'runtimes', build_dir)
+    prefix = get_lib_install_prefix(variant)
+    prefix_dir = os.path.relpath(prefix, build_dir)
+    src_dir = os.path.relpath(LLVM_SRC_DIR / 'runtimes', build_dir)
 
     clang_sysroot = os.path.abspath(get_lib_build_tool_path())
-    musl_include_path = os.path.abspath(get_lib_include_dir(variant))
     cmake_config_path = os.path.relpath(CMAKE_CACHE_DIR / 'pic32clang-target-runtimes.cmake',
                                              build_dir)
 
     remake_dirs(build_dir)
 
     # TODO: Enable LTO and figure out if LTO libraries can be used in non-LTO builds.
+    # TODO: The \' escapes may not be necessary.
     gen_build_cmd = ['cmake', '-G', 'Ninja', 
-                     '-DCMAKE_INSTALL_PREFIX=\'' + install_dir + '\'',
+                     '-DCMAKE_INSTALL_PREFIX=\'' + prefix_dir + '\'',
+                     '-DPIC32CLANG_LIBDIR_SUFFIX=\'' + str(variant.path) + '\'',
                      '-DPIC32CLANG_TARGET_TRIPLE=' + variant.triple,
                      '-DPIC32CLANG_RUNTIME_FLAGS=' + ';'.join(variant.options),
-                     '-DPIC32CLANG_MUSL_INCLUDES=\'' + musl_include_path + '\'',
                      '-DPIC32CLANG_SYSROOT=\'' + clang_sysroot + '\'',
                      '-C', cmake_config_path,
                      src_dir]
     gen_build_info = 'Generate runtimes build script (' + get_lib_info_str(variant) + ')'
     run_subprocess(gen_build_cmd, gen_build_info, build_dir)
-
-    # Generate and install the C++ headers first because libcxxabi will need them.
-    install_cxx_headers_cmd = ['cmake', '--build', '.', '--target', 'install-cxx-headers']
-    install_cxx_headter_info = 'Generate C++ Headers (' + get_lib_info_str(variant) + ')'
-    run_subprocess(install_cxx_headers_cmd, install_cxx_headter_info, build_dir)
 
     build_cmd = ['cmake', '--build', '.']
     build_info = 'Build runtimes (' + get_lib_info_str(variant) + ')'
@@ -611,6 +548,7 @@ def build_llvm_runtimes(variant):
     install_cmd = ['cmake', '--build', '.', '--target', 'install']
     install_info = 'Install runtimes (' + get_lib_info_str(variant) + ')'
     run_subprocess(install_cmd, install_info, build_dir)
+
 
 
 # This is true when this file is executed as a script rather than imported into another file.  We
@@ -625,17 +563,20 @@ if '__main__' == __name__:
     clone_from_git(LLVM_REPO_URL, LLVM_RELEASE_BRANCH, LLVM_SRC_DIR, skip_if_exists=True)
     clone_from_git(MUSL_REPO_URL, MUSL_RELEASE_BRANCH, MUSL_SRC_DIR, skip_if_exists=True)
 
-    #print('\n*****\nBUILD LLVM COMMENTED OUT\n*****\n')
-    if SINGLE_STAGE_LLVM:
-        build_single_stage_llvm()
-    else:
-        build_two_stage_llvm()
+    #if SINGLE_STAGE_LLVM:
+    #    build_single_stage_llvm()
+    #else:
+    #    build_two_stage_llvm()
 
     build_variants = create_build_variants()
-    for variant in build_variants:
+    if False:
+        for variant in build_variants:
             build_musl(variant)
-            build_llvm_builtins(variant)
+            #build_llvm_builtins(variant)
             build_llvm_runtimes(variant)
+    else:
+        build_musl(build_variants[0])
+        build_llvm_runtimes(build_variants[0])
 
     # Do this extra print because otherwise the info string will be below where the command prompt
     # re-appears after this ends.

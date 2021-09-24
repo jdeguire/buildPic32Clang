@@ -28,11 +28,6 @@ set(PIC32CLANG_TARGET_TRIPLE "" CACHE STRING "The target triple for which to bui
 # like paths, to have them treated like a single entry.
 set(PIC32CLANG_RUNTIME_FLAGS "" CACHE STRING "Compiler flags for building the runtimes")
 
-# The path to the Musl C library headers. Musl needs to have been built first before the
-# runtimes can be built because some headers are generated as part of the build.
-# The Python script in the parent directory will do this for you.
-set(PIC32CLANG_MUSL_INCLUDES "" CACHE PATH "Path to Musl C library headers")
-
 # The path of the sysroot of Clang, presumably one that was just built for Pic32Clang,
 # that will build the runtimes. If you are doing a two-stage build (which is what the Python
 # script in the parent directory does) then you will want to point this to the stage2 build
@@ -40,6 +35,13 @@ set(PIC32CLANG_MUSL_INCLUDES "" CACHE PATH "Path to Musl C library headers")
 # CMake files that are needed by the runtime build. Find it at 
 # "<build-prefix>/llvm/tools/clang/stage2-bins".
 set(PIC32CLANG_SYSROOT "" CACHE PATH "The root of the compiler that will build the runtimes")
+
+# Use this to add a suffix to the location at which the libraries will be installed. This is used by
+# the Python script in the parent directory to create subdirectories for different variants of the
+# libraries. For example, it would set this to "r2/micromips" to install Mips32r2 microMIPS libraries 
+# at "<prefix>/lib/r2/micromips".
+set(PIC32CLANG_LIBDIR_SUFFIX "" CACHE STRING "Optionally add a suffix to the library directory name")
+
 
 # -----
 # Set up options supplied above.
@@ -49,16 +51,8 @@ if(PIC32CLANG_TARGET_TRIPLE STREQUAL "")
     message(FATAL_ERROR "PIC32CLANG_TARGET_TRIPLE is empty. Provide a valid target.")
 endif()
 
-if(PIC32CLANG_MUSL_INCLUDES STREQUAL "")
-    message(FATAL_ERROR "PIC32CLANG_MUSL_INCLUDES is empty. Provide a valid path.")
-endif()
-
 if(PIC32CLANG_SYSROOT STREQUAL "")
     message(FATAL_ERROR "PIC32CLANG_SYSROOT is empty. Provide a valid sysroot.")
-endif()
-
-if(NOT IS_DIRECTORY ${PIC32CLANG_MUSL_INCLUDES})
-    message(FATAL_ERROR "PIC32CLANG_MUSL_INCLUDES (${PIC32CLANG_MUSL_INCLUDES}) is not a directory.")
 endif()
 
 if(NOT IS_DIRECTORY ${PIC32CLANG_SYSROOT})
@@ -68,7 +62,7 @@ endif()
 # Add options that will apply regardless of target.
 list(APPEND PIC32CLANG_RUNTIME_FLAGS
     -isystem
-    ${PIC32CLANG_MUSL_INCLUDES}
+    ${CMAKE_INSTALL_PREFIX}/include
     -static
     # Undefine these so that the output is the same regardless of build platform.
     # Otherwise, libc++ will use platform-specific code based on which is defined.
@@ -116,30 +110,35 @@ set(LLVM_INCLUDE_DOCS ON CACHE BOOL "")
 set(LLVM_ENABLE_SPHINX ON CACHE BOOL "")
 set(LLVM_COMPILER_CHECKED ON CACHE BOOL "")
 set(LLVM_ENABLE_RUNTIMES "compiler-rt;libcxx;libcxxabi;libunwind" CACHE STRING "")
+set(LLVM_LIBDIR_SUFFIX "/${PIC32CLANG_LIBDIR_SUFFIX}" CACHE STRING "")
 
-set(COMPILER_RT_OS_DIR baremetal CACHE STRING "")
+set(COMPILER_RT_OS_DIR "${PIC32CLANG_LIBDIR_SUFFIX}/baremetal" CACHE STRING "")
 set(COMPILER_RT_BAREMETAL_BUILD ON CACHE BOOL "")
 set(COMPILER_RT_DEFAULT_TARGET_ONLY ON CACHE BOOL "")
-set(COMPILER_RT_STANDALONE_BUILD ON CACHE BOOL "")
-# The builtins need to have been already built using the pic32clang-target-builtins.cmake file.
-# TODO: These probably won't work until I properly point LLVM to the builtins library.
-set(COMPILER_RT_BUILD_BUILTINS OFF CACHE BOOL "")
+set(COMPILER_RT_BUILD_BUILTINS ON CACHE BOOL "")
 set(COMPILER_RT_BUILD_CRT ON CACHE BOOL "")
-set(COMPILER_RT_BUILD_SANITIZERS ON CACHE BOOL "")
-set(COMPILER_RT_BUILD_XRAY ON CACHE BOOL "")
-set(COMPILER_RT_BUILD_LIBFUZZER ON CACHE BOOL "")
-set(COMPILER_RT_BUILD_PROFILE ON CACHE BOOL "")
-set(COMPILER_RT_BUILD_MEMPROF ON CACHE BOOL "")
-set(COMPILER_RT_USE_BUILTINS_LIBRARY ON CACHE BOOL "")
+# These will not build because platform macros have been undefined above. Defining "__linux__"
+# still fails because the build then looks for linux-specific headers I don't yet have.
+#set(COMPILER_RT_BUILD_SANITIZERS ON CACHE BOOL "")
+#set(COMPILER_RT_BUILD_XRAY ON CACHE BOOL "")
+#set(COMPILER_RT_BUILD_LIBFUZZER ON CACHE BOOL "")
+#set(COMPILER_RT_BUILD_PROFILE ON CACHE BOOL "")
+#set(COMPILER_RT_BUILD_MEMPROF ON CACHE BOOL "")
+set(COMPILER_RT_BUILD_SANITIZERS OFF CACHE BOOL "")
+set(COMPILER_RT_BUILD_XRAY OFF CACHE BOOL "")
+set(COMPILER_RT_BUILD_LIBFUZZER OFF CACHE BOOL "")
+set(COMPILER_RT_BUILD_PROFILE OFF CACHE BOOL "")
+set(COMPILER_RT_BUILD_MEMPROF OFF CACHE BOOL "")
+#set(COMPILER_RT_USE_BUILTINS_LIBRARY ON CACHE BOOL "")
 set(COMPILER_RT_EXCLUDE_ATOMIC_BUILTIN ON CACHE BOOL "")
 
 set(LIBUNWIND_ENABLE_STATIC ON CACHE BOOL "")
 set(LIBUNWIND_ENABLE_SHARED OFF CACHE BOOL "")
 set(LIBUNWIND_USE_COMPILER_RT ON CACHE BOOL "")
 set(LIBUNWIND_ENABLE_CROSS_UNWINDING OFF CACHE BOOL "")
+set(LIBUNWIND_IS_BAREMETAL ON CACHE BOOL "")
 
 set(LIBCXX_HAS_MUSL_LIBC ON CACHE BOOL "")
-set(LIBCXX_STANDALONE_BUILD ON CACHE BOOL "")
 set(LIBCXX_ENABLE_STATIC ON CACHE BOOL "")
 set(LIBCXX_ENABLE_SHARED OFF CACHE BOOL "")
 set(LIBCXX_ENABLE_FILESYSTEM ON CACHE BOOL "")
@@ -150,13 +149,12 @@ set(LIBCXX_USE_LLVM_UNWINDER ON CACHE BOOL "")
 set(LIBCXX_HAS_PTHREAD_API ON CACHE BOOL "")
 
 set(LIBCXXABI_BAREMETAL ON CACHE BOOL "")
-set(LIBCXXABI_STANDALONE_BUILD ON CACHE BOOL "")
 set(LIBCXXABI_ENABLE_STATIC ON CACHE BOOL "")
 set(LIBCXXABI_ENABLE_SHARED OFF CACHE BOOL "")
 set(LIBCXXABI_USE_LLVM_UNWINDER ON CACHE BOOL "")
 set(LIBCXXABI_USE_COMPILER_RT ON CACHE BOOL "")
 set(LIBCXXABI_HAS_PTHREAD_API ON CACHE BOOL "")
-set(LIBCXXABI_LIBCXX_INCLUDES "${CMAKE_INSTALL_PREFIX}/include/c++/v1" CACHE PATH "")
+
 
 # This prints out variables and was found on Stack Overflow.
 #get_cmake_property(_variableNames VARIABLES)
