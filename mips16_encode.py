@@ -32,7 +32,7 @@ EXTSVRS_op = EXTEND_op | SVRS_op
 # Map MIPS32 and MIPS16 register names to the binary encodings in the instruction word. Registers
 # in assembly can be referred to by their numbers or ABI register names, so $7 and $a3 are the same
 # register.
-MIPS32_REGS = {'$0' :  0, '$1' :  1, '$2' :  2, '$3 ':  3, '$4' :  4, '$5' :  5, '$6' :  6, '$7' :  7, 
+MIPS32_REGS = {'$0' :  0, '$1' :  1, '$2' :  2, '$3' :  3, '$4' :  4, '$5' :  5, '$6' :  6, '$7' :  7, 
                '$8' :  8, '$9' :  9, '$10': 10, '$11': 11, '$12': 12, '$13': 13, '$14': 14, '$15': 15,
                '$16': 16, '$17': 17, '$18': 18, '$19': 19, '$20': 20, '$21': 21, '$22': 22, '$23': 23,
                '$24': 24, '$25': 25, '$26': 26, '$27': 27, '$28': 28, '$29': 29, '$30': 30, '$31': 31,
@@ -175,9 +175,38 @@ class Mips16Instr:
         self._is32bit = False
 
     def get_instr_string(self):
-        instr_str = self._name
+        '''Get the string representing the assembly instruction as it was given in the constructor.
+        '''
         args_strs = [str(s) for s in self._args]
-        return instr_str + ' ' + ', '.join(args_strs)
+        return self._name + ' ' + ', '.join(args_strs)
+
+    def get_llvm_instr_string(self):
+        '''Get the assembly instruction string as LLVM's MC tool would output it--that is, with
+        mnemonic register names like s0 or a3 replaced with their numeric equivalents.
+        '''
+        args_strs = []
+
+        for arg in self._args:
+            if isinstance(arg, str):
+                start = arg.find('$')
+
+                if -1 != start:
+                    end = start + 1
+
+                    while end < len(arg)  and  arg[end].isalnum():
+                        end += 1
+
+                    reg_str = arg[start:end]
+
+                    # RA, PC and SP are special because they usually map to separate instructions when used.
+                    # This ends up mapping a named register like $s0 to its numeric version ($16).
+                    if reg_str != '$ra'  and  reg_str != '$pc'  and  reg_str != '$sp'  and reg_str in MIPS32_KEYS:
+                        reg_val = MIPS32_REGS[reg_str]
+                        arg = MIPS32_KEYS[reg_val]
+
+            args_strs.append(str(arg))
+
+        return self._name + ' ' + ', '.join(args_strs)
 
     def get_encoding_as_bytes(self, byteorder):
         if self._is32bit:
@@ -293,7 +322,7 @@ class Mips16RRInstr(Mips16Instr):
         rx_num = MIPS16_REGS[rx]
         ry_num = MIPS16_REGS[ry]
 
-        self._args = (ry, rx)
+        self._args = (rx, ry)
         self._encoding = RR_op | (rx_num << 8) | (ry_num << 5) | (funct)
         self._is32bit = False
 
@@ -323,14 +352,18 @@ class Mips16RRbreakInstr(Mips16Instr):
         self._is32bit = False
 
 class Mips16RRjalrcInstr(Mips16Instr):
-    def __init__(self, name, rx, subfunc_ry):
+    def __init__(self, name, rx, has_ra, subfunc_ry):
         super().__init__(name)
 
         verify_3bit_unsigned_value(subfunc_ry, 'subfunc_ry', 0)
 
         rx_num = MIPS16_REGS[rx]
 
-        self._args = (rx,)
+        if has_ra:
+            self._args = ('$ra', rx)
+        else:
+            self._args = (rx,)
+        
         self._encoding = RR_op | (rx_num << 8) | (subfunc_ry << 5) | JALRC_op
         self._is32bit = False
 
@@ -1023,11 +1056,11 @@ if '__main__' == __name__:
 
         ##
         # Jump and link register
-        Mips16RRjalrcInstr('jalr', rand_mips16_reg(), 0b010),
+        Mips16RRjalrcInstr('jalr', rand_mips16_reg(), True, 0b010),
 
         ##
         # Jump and link register compact
-        Mips16RRjalrcInstr('jalrc', rand_mips16_reg(), 0b110),
+        Mips16RRjalrcInstr('jalrc', rand_mips16_reg(), True, 0b110),
 
         ##
         # Jump and link exchange (MIPS16 format)
@@ -1039,7 +1072,7 @@ if '__main__' == __name__:
 
         ##
         # Jump register through MIPS16 GPR
-        Mips16RRjalrcInstr('jr', rand_mips16_reg(), 0b000),
+        Mips16RRjalrcInstr('jr', rand_mips16_reg(), False, 0b000),
 
         ##
         # Jump register through ra compact
@@ -1047,7 +1080,7 @@ if '__main__' == __name__:
 
         ##
         # Jump register through MIPS16 GPR compact
-        Mips16RRjalrcInstr('jrc', rand_mips16_reg(), 0b100),
+        Mips16RRjalrcInstr('jrc', rand_mips16_reg(), False, 0b100),
 
         ##
         # Load byte
@@ -1325,23 +1358,23 @@ if '__main__' == __name__:
     print()
 
     for instr in mips16_instrs:
-        instr_str = instr.get_instr_string()
-
-        instr_line = instr_str
+        instr_line = instr.get_instr_string()
 
         if len(instr_line) < 32:
             instr_line += ' ' * (32 - len(instr_line))
         else:
             instr_line += '  '
         
-        instr_line += '# CHECK: ' + instr_str
+        instr_line += '# CHECK: ' + instr.get_llvm_instr_string()
 
         if len(instr_line) < 72:
             instr_line += ' ' * (72 - len(instr_line))
         else:
             instr_line += '  '
         
+        # The width of 4 specified in the format() function includes the '0x' characters generated
+        # using the '#' specifier, so this will give 2 hex digits.
         instr_encoding = instr.get_encoding_as_bytes('little')
-        instr_line += '# encoding: [' + ','.join([hex(e) for e in instr_encoding]) + ']'
+        instr_line += '# encoding: [' + ','.join([format(e, '#04x') for e in instr_encoding]) + ']'
 
         print(instr_line)
