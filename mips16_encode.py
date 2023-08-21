@@ -45,7 +45,7 @@ MIPS32_KEYS = list(MIPS32_REGS.keys())
 
 # Yes, MIPS16 really does use the names $16 and $17 and encodes them as 0 and 1, respectively.
 # Also, $0 and $1 are invalid in MIPS16, probably for compatibility with the MIPS32 conventions.
-MIPS16_REGS = {'$2' :  2, '$3 ':  3, '$4' :  4, '$5' :  5, '$6' :  6, '$7' :  7, '$16': 0, '$17': 1,
+MIPS16_REGS = {'$2' :  2, '$3' :  3, '$4' :  4, '$5' :  5, '$6' :  6, '$7' :  7, '$16': 0, '$17': 1,
                '$v0':  2, '$v1':  3, '$a0':  4, '$a1':  5, '$a2':  6, '$a3':  7, '$s0': 0, '$s1': 1}
 
 MIPS16_KEYS = list(MIPS16_REGS.keys())
@@ -186,25 +186,48 @@ class Mips16Instr:
         '''
         args_strs = []
 
-        for arg in self._args:
-            if isinstance(arg, str):
-                start = arg.find('$')
+        # SAVE and RESTORE instructions need special handling because they have register lists that
+        # LLVM will print out sorted (to be fair, I wrote the parser for these, so it's my fault...).
+        is_svrs = (self._name == 'save' or self._name == 'restore')
+        if is_svrs:
+            caller_saved, num_caller_saved = self._get_register_list(self._args)
+            caller_saved.sort()
+            for reg in caller_saved:
+                # LLVM does use the name of some special registers, like $pc, $sp, and $ra.
+                if 30 == reg:
+                    args_strs.append('$fp')
+                elif 31 == reg:
+                    args_strs.append('$ra')
+                else:
+                    args_strs.append(MIPS32_KEYS[reg])
 
-                if -1 != start:
-                    end = start + 1
+            framesize = int(self._args[num_caller_saved])
+            args_strs.append(str(framesize))
 
-                    while end < len(arg)  and  arg[end].isalnum():
-                        end += 1
+            callee_saved, _ = self._get_register_list(self._args[num_caller_saved + 1:])
+            callee_saved.sort()
+            for reg in callee_saved:
+                args_strs.append(MIPS32_KEYS[reg])
+        else:
+            for arg in self._args:
+                if isinstance(arg, str):
+                    start = arg.find('$')
 
-                    reg_str = arg[start:end]
+                    if -1 != start:
+                        end = start + 1
 
-                    # RA, PC and SP are special because they usually map to separate instructions when used.
-                    # This ends up mapping a named register like $s0 to its numeric version ($16).
-                    if reg_str != '$ra'  and  reg_str != '$pc'  and  reg_str != '$sp'  and reg_str in MIPS32_KEYS:
-                        reg_val = MIPS32_REGS[reg_str]
-                        arg = MIPS32_KEYS[reg_val]
+                        while end < len(arg)  and  arg[end].isalnum():
+                            end += 1
 
-            args_strs.append(str(arg))
+                        reg_str = arg[start:end]
+
+                        # RA, PC and SP are special because they usually map to separate instructions when used,
+                        # so don't change those. Convert others to their numeric version as well (such as $s1 to $17).
+                        if reg_str != '$ra'  and  reg_str != '$pc'  and  reg_str != '$sp'  and reg_str in MIPS32_KEYS:
+                            reg_num = MIPS32_REGS[reg_str]
+                            arg = arg[:start] + MIPS32_KEYS[reg_num] + arg[end:]
+
+                args_strs.append(str(arg))
 
         return self._name + ' ' + ', '.join(args_strs)
 
@@ -215,6 +238,55 @@ class Mips16Instr:
             len = 2
 
         return self._encoding.to_bytes(len, byteorder)
+
+    def _get_register_list(self, reglist):
+        '''Parse the register arguments forming a list of registers until either the end of the list
+        or until a non-register argument is found.
+
+        This returns a list of register numbers as ints and the number of arguments that were parsed.
+        Ranges such as $18-$22 will be returned with each register in the list invidually. This assumes
+        that the register arguments start with '$' and will stop if either that is not the case or
+        if the argument is not a string.
+        '''
+        output_regs = []
+        num_parsed = 0
+
+        for reg in reglist:
+            # Reached the end of the register list, so we're done.
+            if not isinstance(reg, str)  or  '$' != reg[0]:
+                break
+
+            end = 2
+
+            while end < len(reg)  and  reg[end].isalnum():
+                end += 1
+
+            reg_str = reg[0:end]
+            reg_num = MIPS32_REGS[reg_str]
+
+            if end < len(reg)  and  '-' == reg[end]:
+                # Indicates a range, so get the other end of the range. For now, assume the
+                # range looks like "$r1-$r2".
+                start2 = end + 1
+                end2 = start2 + 1
+            
+                while end2 < len(reg)  and  reg[end2].isalnum():
+                    end2 += 1
+
+                reg_str2 = reg[start2:end2]
+                reg_num2 = MIPS32_REGS[reg_str2]
+
+                if reg_num > reg_num2:
+                    reg_num, reg_num2 = reg_num2, reg_num
+                
+                for r in range(reg_num, reg_num2 + 1):
+                    output_regs.append(r)
+            else:
+                output_regs.append(reg_num)
+
+            num_parsed +=1
+
+        return (output_regs, num_parsed)
 
 
 class Mips16IInstr(Mips16Instr):
@@ -430,7 +502,7 @@ class Mips16RRRInstr(Mips16Instr):
         ry_num = MIPS16_REGS[ry]
         rz_num = MIPS16_REGS[rz]
 
-        self._args = (rz, ry, rx)
+        self._args = (rz, rx, ry)
         self._encoding = RRR_op | (rx_num << 8) | (ry_num << 5) | (rz_num << 2) | (f)
         self._is32bit = False
 
@@ -460,7 +532,7 @@ class Mips16ShiftInstr(Mips16Instr):
         rx_num = MIPS16_REGS[rx]
         ry_num = MIPS16_REGS[ry]
 
-        self._args = (ry, rx, sa)
+        self._args = (rx, ry, sa)
         self._encoding = SHIFT_op | (rx_num << 8) | (ry_num << 5) | ((sa & 0x07) << 2) | (f)
         self._is32bit = False
 
@@ -798,15 +870,16 @@ class Mips16ExtRRIAInstr(Mips16Instr):
         self._is32bit = True
 
 class Mips16ExtShiftInstr(Mips16Instr):
-    def __init__(self, name, sa, rx, ry, f):
+    def __init__(self, name, rx, ry, sa, f):
         super().__init__(name)
 
         verify_2bit_unsigned_value(f, 'f', 0)
+        verify_5bit_unsigned_value(sa, 'sa', 0)
 
         rx_num = MIPS16_REGS[rx]
         ry_num = MIPS16_REGS[ry]
 
-        self._args = (ry, rx, sa)
+        self._args = (rx, ry, sa)
         self._encoding = EXTSHIFT_op | (sa << 22) | (rx_num << 8) | (ry_num << 5) | f
         self._is32bit = True
 
@@ -883,8 +956,10 @@ class Mips16ExtI8SvrsInstr(Mips16Instr):
         # This instruction has a weird argument format, so set them up manually.
         # This was set up based on GNU Binutils test code in the source tree at
         # "gas/testsuite/gas/mips/save.s" because the MIPS16 datasheet is not that helpful.
-        xs_args = ['$18', '$18-$19', '$18-$20', '$18-$21', '$18-$22', '$18-$23', '$18-$23, $31']
-        if xsregs > 0:
+        xs_args = ['$18', '$18-$19', '$18-$20', '$18-$21', '$18-$22', '$18-$23', '$18-$23, $30']
+        if 7 == xsregs:
+            self._args += ('$18-$23', '$30')
+        elif xsregs > 0:
             self._args += (xs_args[xsregs-1],)
 
         if ra != 0:
@@ -904,7 +979,11 @@ class Mips16ExtI8SvrsInstr(Mips16Instr):
             num_arg_regs = aregs_args[aregs][0]
         else:
             num_arg_regs = 0
-        
+            # 11 is special in that it encodes 4 callee-saved regs; otherwise, LLVM will not
+            # generate a RESTORE with the caller-saved bits in aregs set.
+            if 11 != aregs:
+                aregs = aregs & 0x03
+
         if 4 == num_arg_regs:
             self._args += ('$4-$7',)
         elif 3 == num_arg_regs:
@@ -967,8 +1046,8 @@ if '__main__' == __name__:
         # 3-operand SP-relative (the implicit SP counts as an operand)
         Mips16RIsprelInstr('addiu', 0b00000, rand_mips16_reg(), rand_imm(4, 255 << 2, 4), 2),
         # 3-operand SP-relative extended
-        Mips16ExtRIsprelInstr('addiu', 0b00000, rand_mips16_reg(), rand_imm(-65536, -1), 0),
-        Mips16ExtRIsprelInstr('addiu', 0b00000, rand_mips16_reg(), rand_imm(1, 65535), 0),
+        Mips16ExtRIsprelInstr('addiu', 0b00000, rand_mips16_reg(), rand_imm(-32768, -1), 0),
+        Mips16ExtRIsprelInstr('addiu', 0b00000, rand_mips16_reg(), rand_imm(1, 32767), 0),
 
         ##
         # Add unsigned word 3-operand
@@ -1260,7 +1339,7 @@ if '__main__' == __name__:
         # 16-bit
         Mips16ShiftInstr('sll', rand_mips16_reg(), rand_mips16_reg(), rand_imm(1, 8), 0b00),
         # extended
-        Mips16ExtShiftInstr('sll', rand_imm(0, 31), rand_mips16_reg(), rand_mips16_reg(), 0b00),
+        Mips16ExtShiftInstr('sll', rand_mips16_reg(), rand_mips16_reg(), rand_imm(9, 31), 0b00),
 
         ##
         # Shift word left logical variable
@@ -1295,7 +1374,7 @@ if '__main__' == __name__:
         # 16-bit
         Mips16ShiftInstr('sra', rand_mips16_reg(), rand_mips16_reg(), rand_imm(1, 8), 0b11),
         # extended
-        Mips16ExtShiftInstr('sra', rand_imm(0, 31), rand_mips16_reg(), rand_mips16_reg(), 0b11),
+        Mips16ExtShiftInstr('sra', rand_mips16_reg(), rand_mips16_reg(), rand_imm(9, 31), 0b11),
 
         ##
         # Shift word right arithmetic variable
@@ -1306,7 +1385,7 @@ if '__main__' == __name__:
         # 16-bit
         Mips16ShiftInstr('srl', rand_mips16_reg(), rand_mips16_reg(), rand_imm(1, 8), 0b10),
         # extended
-        Mips16ExtShiftInstr('srl', rand_imm(0, 31), rand_mips16_reg(), rand_mips16_reg(), 0b10),
+        Mips16ExtShiftInstr('srl', rand_mips16_reg(), rand_mips16_reg(), rand_imm(9, 31), 0b10),
 
         ##
         # Shift word right logical variable
@@ -1354,7 +1433,7 @@ if '__main__' == __name__:
     ]
 
     print('# REQUIRES: mips-registered-target')
-    print('# RUN: llvm-mc -arch=mipsel -mcpu=mips32r2 -mattr=+mips16 -show-encoding -show-inst %%s | FileCheck %%s')
+    print('# RUN: llvm-mc -arch=mipsel -mcpu=mips32r2 -mattr=+mips16 -show-encoding -show-inst %s | FileCheck %s')
     print()
 
     for instr in mips16_instrs:
