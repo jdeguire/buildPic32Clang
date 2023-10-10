@@ -53,8 +53,11 @@ MIPS16_KEYS = list(MIPS16_REGS.keys())
 def rand_mips16_reg():
     return random.choice(MIPS16_KEYS)
 
-def rand_mips32_reg():
-    return random.choice(MIPS32_KEYS)
+def rand_mips32only_reg():
+    reg = random.choice(MIPS32_KEYS)
+    while reg in MIPS16_KEYS:
+        reg = random.choice(MIPS32_KEYS)
+    return reg
 
 def rand_imm(start, end, stride=1):
     return random.randrange(start, end+1, stride)     # +1 to include end in range
@@ -221,9 +224,21 @@ class Mips16Instr:
 
                         reg_str = arg[start:end]
 
-                        # RA, PC and SP are special because they usually map to separate instructions when used,
-                        # so don't change those. Convert others to their numeric version as well (such as $s1 to $17).
-                        if reg_str != '$ra'  and  reg_str != '$pc'  and  reg_str != '$sp'  and reg_str in MIPS32_KEYS:
+                        # LLVM will print the names of some special registers instead of their 
+                        # numbers. Convert others to their numeric version (such as $s1 to $17).
+                        if reg_str == '$ra'  or  reg_str == '$31':
+                            arg = arg[:start] + '$ra' + arg[end:]
+                        elif reg_str == '$fp'  or  reg_str == '$30':
+                            arg = arg[:start] + '$fp' + arg[end:]
+                        elif reg_str == '$sp'  or  reg_str == '$29':
+                            arg = arg[:start] + '$sp' + arg[end:]
+                        elif reg_str == '$gp'  or  reg_str == '$28':
+                            arg = arg[:start] + '$gp' + arg[end:]
+                        elif reg_str == '$zero'  or  reg_str == '$0':
+                            arg = arg[:start] + '$zero' + arg[end:]
+                        elif reg_str == '$pc':
+                            arg = arg[:start] + '$pc' + arg[end:]                            
+                        elif reg_str in MIPS32_KEYS:
                             reg_num = MIPS32_REGS[reg_str]
                             arg = arg[:start] + MIPS32_KEYS[reg_num] + arg[end:]
 
@@ -616,7 +631,6 @@ class Mips16I8Mov32rInstr(Mips16Instr):
         self._args = (r32, rz)
         self._encoding = I8_op | (funct << 8) | (r32_2_0 << 5) | (r32_4_3 << 3) | rz_num
         self._is32bit = False
-        r32_num = MIPS32_REGS[r32]
 
 class Mips16I8SvrsInstr(Mips16Instr):
     def __init__(self, name, s, ra, s0, s1, framesize):
@@ -1015,7 +1029,7 @@ class Mips16ExtI8SvrsInstr(Mips16Instr):
 
 
 if '__main__' == __name__:
-    random.seed(0xDEADBEEF)   # used fixed seed so mulitple runs generate the same assembly
+    #random.seed(0xDEADBEEF)   # used fixed seed so mulitple runs generate the same assembly
 
     mips16_instrs = [
         ##
@@ -1024,30 +1038,34 @@ if '__main__' == __name__:
         Mips16RIInstr('addiu', 0b01001, rand_mips16_reg(), rand_imm(-128, -1), 0, True),
         Mips16RIInstr('addiu', 0b01001, rand_mips16_reg(), rand_imm(1, 127), 0, True),
         # 2-operand extended
-        Mips16ExtRIInstr('addiu', 0b01001, rand_mips16_reg(), rand_imm(-32768, -1), 0),
-        Mips16ExtRIInstr('addiu', 0b01001, rand_mips16_reg(), rand_imm(1, 32767), 0),
+        Mips16ExtRIInstr('addiu', 0b01001, rand_mips16_reg(), rand_imm(-32768, -129), 0),
+        Mips16ExtRIInstr('addiu', 0b01001, rand_mips16_reg(), rand_imm(128, 32767), 0),
         # 3-operand
         Mips16RRIAInstr('addiu', rand_mips16_reg(), rand_mips16_reg(), 0, rand_imm(-8, -1)),
         Mips16RRIAInstr('addiu', rand_mips16_reg(), rand_mips16_reg(), 0, rand_imm(1, 7)),
         # 3-operand extended
-        Mips16ExtRRIAInstr('addiu', rand_mips16_reg(), rand_mips16_reg(), 0, rand_imm(-16384, -1)),
-        Mips16ExtRRIAInstr('addiu', rand_mips16_reg(), rand_mips16_reg(), 0, rand_imm(1, 16383)),
+        Mips16ExtRRIAInstr('addiu', rand_mips16_reg(), rand_mips16_reg(), 0, rand_imm(-16384, -9)),
+        Mips16ExtRRIAInstr('addiu', rand_mips16_reg(), rand_mips16_reg(), 0, rand_imm(7, 16383)),
         # 3-operand PC-relative (the implicit PC counts as an operand)
         Mips16RIpcrelInstr('addiu', 0b00001, rand_mips16_reg(), rand_imm(4, 255, 4), 2),
         # 3-operand PC-realtive extended
-        Mips16ExtRIpcrelInstr('addiu', 0b00001, rand_mips16_reg(), rand_imm(-32768, -1)),
-        Mips16ExtRIpcrelInstr('addiu', 0b00001, rand_mips16_reg(), rand_imm(1, 32767)),
+        Mips16ExtRIpcrelInstr('addiu', 0b00001, rand_mips16_reg(), rand_imm(4, 252, 4) + rand_imm(1, 3)),
+        Mips16ExtRIpcrelInstr('addiu', 0b00001, rand_mips16_reg(), rand_imm(-32768, 3)),
+        Mips16ExtRIpcrelInstr('addiu', 0b00001, rand_mips16_reg(), rand_imm(256, 32767)),
         # 2-operand SP-relative (the implicit SP counts as an operand)
         Mips16I8sprelInstr('addiu', 0b011, rand_imm(-128 << 3, -8, 8), 3, True),
         Mips16I8sprelInstr('addiu', 0b011, rand_imm(8, 127 << 3, 8), 3, True),
         # 2-operand SP-relative extended
-        Mips16ExtI8sprelInstr('addiu', 0b011, rand_imm(-32768, -1), 0),
-        Mips16ExtI8sprelInstr('addiu', 0b011, rand_imm(0, 32767), 0),
+        Mips16ExtI8sprelInstr('addiu', 0b011, rand_imm(-128 << 3, -16, 8) + rand_imm(1, 7), 0),
+        Mips16ExtI8sprelInstr('addiu', 0b011, rand_imm(-32768, (-128 << 3) - 1), 0),
+        Mips16ExtI8sprelInstr('addiu', 0b011, rand_imm(8, 127 << 3, 8) + rand_imm(1, 7), 0),
+        Mips16ExtI8sprelInstr('addiu', 0b011, rand_imm((127 << 3) + 1, 32767), 0),
         # 3-operand SP-relative (the implicit SP counts as an operand)
         Mips16RIsprelInstr('addiu', 0b00000, rand_mips16_reg(), rand_imm(4, 255 << 2, 4), 2),
         # 3-operand SP-relative extended
-        Mips16ExtRIsprelInstr('addiu', 0b00000, rand_mips16_reg(), rand_imm(-32768, -1), 0),
-        Mips16ExtRIsprelInstr('addiu', 0b00000, rand_mips16_reg(), rand_imm(1, 32767), 0),
+        Mips16ExtRIsprelInstr('addiu', 0b00000, rand_mips16_reg(), rand_imm(4, 254 << 2, 4) + rand_imm(1, 3), 0),
+        Mips16ExtRIsprelInstr('addiu', 0b00000, rand_mips16_reg(), rand_imm(-32768, 3), 0),
+        Mips16ExtRIsprelInstr('addiu', 0b00000, rand_mips16_reg(), rand_imm(1021, 32767), 0),
 
         ##
         # Add unsigned word 3-operand
@@ -1067,8 +1085,8 @@ if '__main__' == __name__:
         Mips16IInstr('b', 0b00010, rand_imm(-2048, -2, 2), 1),
         Mips16IInstr('b', 0b00010, rand_imm(2, 2046, 2), 1),
         # extended
-        Mips16ExtIInstr('b', 0b00010, rand_imm(-65536, -2, 2), 1),
-        Mips16ExtIInstr('b', 0b00010, rand_imm(2, 65534, 2), 1),
+        Mips16ExtIInstr('b', 0b00010, rand_imm(-65536, -2050, 2), 1),
+        Mips16ExtIInstr('b', 0b00010, rand_imm(2048, 65534, 2), 1),
 
         ##
         # Branch on equal to zero
@@ -1076,8 +1094,8 @@ if '__main__' == __name__:
         Mips16RIInstr('beqz', 0b00100, rand_mips16_reg(), rand_imm(-256, -2, 2), 1, True),
         Mips16RIInstr('beqz', 0b00100, rand_mips16_reg(), rand_imm(2, 254, 2), 1, True),
         # extended
-        Mips16ExtRIInstr('beqz', 0b00100, rand_mips16_reg(), rand_imm(-65536, -2, 2), 1),
-        Mips16ExtRIInstr('beqz', 0b00100, rand_mips16_reg(), rand_imm(2, 65534, 2), 1),
+        Mips16ExtRIInstr('beqz', 0b00100, rand_mips16_reg(), rand_imm(-65536, -258, 2), 1),
+        Mips16ExtRIInstr('beqz', 0b00100, rand_mips16_reg(), rand_imm(256, 65534, 2), 1),
 
         ##
         # Branch on not equal to zero
@@ -1085,8 +1103,8 @@ if '__main__' == __name__:
         Mips16RIInstr('bnez', 0b00101, rand_mips16_reg(), rand_imm(-256, -2, 2), 1, True),
         Mips16RIInstr('bnez', 0b00101, rand_mips16_reg(), rand_imm(2, 254, 2), 1, True),
         # extended
-        Mips16ExtRIInstr('bnez', 0b00101, rand_mips16_reg(), rand_imm(-65536, -2, 2), 1),
-        Mips16ExtRIInstr('bnez', 0b00101, rand_mips16_reg(), rand_imm(2, 65534, 2), 1),
+        Mips16ExtRIInstr('bnez', 0b00101, rand_mips16_reg(), rand_imm(-65536, -258, 2), 1),
+        Mips16ExtRIInstr('bnez', 0b00101, rand_mips16_reg(), rand_imm(256, 65534, 2), 1),
 
         ##
         # Breakpoint
@@ -1098,8 +1116,8 @@ if '__main__' == __name__:
         Mips16I8Instr('bteqz', 0b000, rand_imm(-256, -2, 2), 1),
         Mips16I8Instr('bteqz', 0b000, rand_imm(2, 254, 2), 1),
         # extended
-        Mips16ExtI8Instr('bteqz', 0b000, rand_imm(-65536, -2, 2), 1),
-        Mips16ExtI8Instr('bteqz', 0b000, rand_imm(2, 65534, 2), 1),
+        Mips16ExtI8Instr('bteqz', 0b000, rand_imm(-65536, -258, 2), 1),
+        Mips16ExtI8Instr('bteqz', 0b000, rand_imm(256, 65534, 2), 1),
 
         ##
         # Branch on T not equal to zero
@@ -1107,8 +1125,8 @@ if '__main__' == __name__:
         Mips16I8Instr('btnez', 0b001, rand_imm(-256, -2, 2), 1),
         Mips16I8Instr('btnez', 0b001, rand_imm(2, 254, 2), 1),
         # extended
-        Mips16ExtI8Instr('btnez', 0b001, rand_imm(-65536, -2, 2), 1),
-        Mips16ExtI8Instr('btnez', 0b001, rand_imm(2, 65534, 2), 1),
+        Mips16ExtI8Instr('btnez', 0b001, rand_imm(-65536, -258, 2), 1),
+        Mips16ExtI8Instr('btnez', 0b001, rand_imm(256, 65534, 2), 1),
 
         ##
         # Compare
@@ -1119,7 +1137,7 @@ if '__main__' == __name__:
         # 16-bit
         Mips16RIInstr('cmpi', 0b01110, rand_mips16_reg(), rand_imm(0, 255), 0, False),
         # extended
-        Mips16ExtRIInstr('cmpi', 0b01110, rand_mips16_reg(), rand_imm(0, 32767), 0),
+        Mips16ExtRIInstr('cmpi', 0b01110, rand_mips16_reg(), rand_imm(256, 32767), 0),
 
         ##
         # Divide (signed)
@@ -1167,7 +1185,7 @@ if '__main__' == __name__:
         Mips16RRIMemInstr('lb', 0b10000, rand_mips16_reg(), rand_mips16_reg(), rand_imm(0, 31), 0),
         # extended
         Mips16ExtRRIMemInstr('lb', 0b10000, rand_mips16_reg(), rand_mips16_reg(), rand_imm(-32768, -1)),
-        Mips16ExtRRIMemInstr('lb', 0b10000, rand_mips16_reg(), rand_mips16_reg(), rand_imm(1, 32767)),
+        Mips16ExtRRIMemInstr('lb', 0b10000, rand_mips16_reg(), rand_mips16_reg(), rand_imm(32, 32767)),
 
         ##
         # Load byte unsigned
@@ -1175,7 +1193,7 @@ if '__main__' == __name__:
         Mips16RRIMemInstr('lbu', 0b10100, rand_mips16_reg(), rand_mips16_reg(), rand_imm(0, 31), 0),
         # extended
         Mips16ExtRRIMemInstr('lbu', 0b10100, rand_mips16_reg(), rand_mips16_reg(), rand_imm(-32768, -1)),
-        Mips16ExtRRIMemInstr('lbu', 0b10100, rand_mips16_reg(), rand_mips16_reg(), rand_imm(1, 32767)),
+        Mips16ExtRRIMemInstr('lbu', 0b10100, rand_mips16_reg(), rand_mips16_reg(), rand_imm(32, 32767)),
 
         ##
         # Load halfword
@@ -1183,7 +1201,7 @@ if '__main__' == __name__:
         Mips16RRIMemInstr('lh', 0b10001, rand_mips16_reg(), rand_mips16_reg(), rand_imm(0, 62, 2), 1),
         # extended
         Mips16ExtRRIMemInstr('lh', 0b10001, rand_mips16_reg(), rand_mips16_reg(), rand_imm(-32768, -1)),
-        Mips16ExtRRIMemInstr('lh', 0b10001, rand_mips16_reg(), rand_mips16_reg(), rand_imm(1, 32767)),
+        Mips16ExtRRIMemInstr('lh', 0b10001, rand_mips16_reg(), rand_mips16_reg(), rand_imm(64, 32767)),
 
         ##
         # Load halfword unsigned
@@ -1191,14 +1209,14 @@ if '__main__' == __name__:
         Mips16RRIMemInstr('lhu', 0b10101, rand_mips16_reg(), rand_mips16_reg(), rand_imm(0, 62, 2), 1),
         # extended
         Mips16ExtRRIMemInstr('lhu', 0b10101, rand_mips16_reg(), rand_mips16_reg(), rand_imm(-32768, -1)),
-        Mips16ExtRRIMemInstr('lhu', 0b10101, rand_mips16_reg(), rand_mips16_reg(), rand_imm(1, 32767)),
+        Mips16ExtRRIMemInstr('lhu', 0b10101, rand_mips16_reg(), rand_mips16_reg(), rand_imm(64, 32767)),
 
         ##
         # Load immediate
         # 16-bit
         Mips16RIInstr('li', 0b01101, rand_mips16_reg(), rand_imm(0, 255), 0, False),
         # extended
-        Mips16ExtRIInstr('li', 0b01101, rand_mips16_reg(), rand_imm(0, 32767), 0),
+        Mips16ExtRIInstr('li', 0b01101, rand_mips16_reg(), rand_imm(256, 32767), 0),
 
         ##
         # Load word
@@ -1206,7 +1224,7 @@ if '__main__' == __name__:
         Mips16RRIMemInstr('lw', 0b10011, rand_mips16_reg(), rand_mips16_reg(), rand_imm(0, 124, 4), 2),
         # extended
         Mips16ExtRRIMemInstr('lw', 0b10011, rand_mips16_reg(), rand_mips16_reg(), rand_imm(-32768, -1)),
-        Mips16ExtRRIMemInstr('lw', 0b10011, rand_mips16_reg(), rand_mips16_reg(), rand_imm(1, 32767)),
+        Mips16ExtRRIMemInstr('lw', 0b10011, rand_mips16_reg(), rand_mips16_reg(), rand_imm(128, 32767)),
 
         ##
         # Load word PC-relative
@@ -1214,7 +1232,7 @@ if '__main__' == __name__:
         Mips16RIpcrelMemInstr('lw', 0b10110, rand_mips16_reg(), rand_imm(0, 1020, 4), 2),
         # extended
         Mips16ExtRIpcrelMemInstr('lw', 0b10110, rand_mips16_reg(), rand_imm(-32768, -1), 0),
-        Mips16ExtRIpcrelMemInstr('lw', 0b10110, rand_mips16_reg(), rand_imm(1, 32767), 0),
+        Mips16ExtRIpcrelMemInstr('lw', 0b10110, rand_mips16_reg(), rand_imm(1024, 32767), 0),
 
         ##
         # Load word SP-relative
@@ -1222,7 +1240,7 @@ if '__main__' == __name__:
         Mips16RIsprelMemInstr('lw', 0b10010, rand_mips16_reg(), rand_imm(0, 1020, 4), 2),
         # extended
         Mips16ExtRIsprelMemInstr('lw', 0b10010, rand_mips16_reg(), rand_imm(-32768, -1), 0),
-        Mips16ExtRIsprelMemInstr('lw', 0b10010, rand_mips16_reg(), rand_imm(1, 32767), 0),
+        Mips16ExtRIsprelMemInstr('lw', 0b10010, rand_mips16_reg(), rand_imm(1024, 32767), 0),
 
         ##
         # Move from hi
@@ -1234,11 +1252,11 @@ if '__main__' == __name__:
 
         ##
         # Move (16 to 32)
-        Mips16I8Mov32rInstr('move', 0b101, rand_mips32_reg(), rand_mips16_reg()),
+        Mips16I8Mov32rInstr('move', 0b101, rand_mips32only_reg(), rand_mips16_reg()),
 
         ##
         # Move (32 to 16)
-        Mips16I8Movr32Instr('move', 0b111, rand_mips16_reg(), rand_mips32_reg()),
+        Mips16I8Movr32Instr('move', 0b111, rand_mips16_reg(), rand_mips32only_reg()),
 
         ##
         # Multiply word
@@ -1276,14 +1294,14 @@ if '__main__' == __name__:
         Mips16I8SvrsInstr('restore', 0, 1, 1, 0, rand_imm(8, 128, 8)),
         Mips16I8SvrsInstr('restore', 0, 1, 1, 1, rand_imm(8, 128, 8)),
         # extended
-        Mips16ExtI8SvrsInstr('restore', rand_imm(0, 7), rand_imm(0, 14), 0, 0, 0, 0, rand_imm(0, 2040, 8)),
-        Mips16ExtI8SvrsInstr('restore', rand_imm(0, 7), rand_imm(0, 14), 0, 0, 0, 1, rand_imm(0, 2040, 8)),
-        Mips16ExtI8SvrsInstr('restore', rand_imm(0, 7), rand_imm(0, 14), 0, 0, 1, 0, rand_imm(0, 2040, 8)),
-        Mips16ExtI8SvrsInstr('restore', rand_imm(0, 7), rand_imm(0, 14), 0, 0, 1, 1, rand_imm(0, 2040, 8)),
-        Mips16ExtI8SvrsInstr('restore', rand_imm(0, 7), rand_imm(0, 14), 0, 1, 0, 0, rand_imm(0, 2040, 8)),
-        Mips16ExtI8SvrsInstr('restore', rand_imm(0, 7), rand_imm(0, 14), 0, 1, 0, 1, rand_imm(0, 2040, 8)),
-        Mips16ExtI8SvrsInstr('restore', rand_imm(0, 7), rand_imm(0, 14), 0, 1, 1, 0, rand_imm(0, 2040, 8)),
-        Mips16ExtI8SvrsInstr('restore', rand_imm(0, 7), rand_imm(0, 14), 0, 1, 1, 1, rand_imm(0, 2040, 8)),
+        Mips16ExtI8SvrsInstr('restore', rand_imm(0, 7), rand_imm(0, 14), 0, 0, 0, 0, rand_imm(136, 2040, 8)),
+        Mips16ExtI8SvrsInstr('restore', rand_imm(0, 7), rand_imm(0, 14), 0, 0, 0, 1, rand_imm(136, 2040, 8)),
+        Mips16ExtI8SvrsInstr('restore', rand_imm(0, 7), rand_imm(0, 14), 0, 0, 1, 0, rand_imm(136, 2040, 8)),
+        Mips16ExtI8SvrsInstr('restore', rand_imm(0, 7), rand_imm(0, 14), 0, 0, 1, 1, rand_imm(136, 2040, 8)),
+        Mips16ExtI8SvrsInstr('restore', rand_imm(0, 7), rand_imm(0, 14), 0, 1, 0, 0, rand_imm(136, 2040, 8)),
+        Mips16ExtI8SvrsInstr('restore', rand_imm(0, 7), rand_imm(0, 14), 0, 1, 0, 1, rand_imm(136, 2040, 8)),
+        Mips16ExtI8SvrsInstr('restore', rand_imm(0, 7), rand_imm(0, 14), 0, 1, 1, 0, rand_imm(136, 2040, 8)),
+        Mips16ExtI8SvrsInstr('restore', rand_imm(0, 7), rand_imm(0, 14), 0, 1, 1, 1, rand_imm(136, 2040, 8)),
 
         ##
         # Save
@@ -1297,14 +1315,14 @@ if '__main__' == __name__:
         Mips16I8SvrsInstr('save', 1, 1, 1, 0, rand_imm(8, 128, 8)),
         Mips16I8SvrsInstr('save', 1, 1, 1, 1, rand_imm(8, 128, 8)),
         # extended
-        Mips16ExtI8SvrsInstr('save', rand_imm(0, 7), rand_imm(0, 14), 1, 0, 0, 0, rand_imm(0, 2040, 8)),
-        Mips16ExtI8SvrsInstr('save', rand_imm(0, 7), rand_imm(0, 14), 1, 0, 0, 1, rand_imm(0, 2040, 8)),
-        Mips16ExtI8SvrsInstr('save', rand_imm(0, 7), rand_imm(0, 14), 1, 0, 1, 0, rand_imm(0, 2040, 8)),
-        Mips16ExtI8SvrsInstr('save', rand_imm(0, 7), rand_imm(0, 14), 1, 0, 1, 1, rand_imm(0, 2040, 8)),
-        Mips16ExtI8SvrsInstr('save', rand_imm(0, 7), rand_imm(0, 14), 1, 1, 0, 0, rand_imm(0, 2040, 8)),
-        Mips16ExtI8SvrsInstr('save', rand_imm(0, 7), rand_imm(0, 14), 1, 1, 0, 1, rand_imm(0, 2040, 8)),
-        Mips16ExtI8SvrsInstr('save', rand_imm(0, 7), rand_imm(0, 14), 1, 1, 1, 0, rand_imm(0, 2040, 8)),
-        Mips16ExtI8SvrsInstr('save', rand_imm(0, 7), rand_imm(0, 14), 1, 1, 1, 1, rand_imm(0, 2040, 8)),
+        Mips16ExtI8SvrsInstr('save', rand_imm(0, 7), rand_imm(0, 14), 1, 0, 0, 0, rand_imm(136, 2040, 8)),
+        Mips16ExtI8SvrsInstr('save', rand_imm(0, 7), rand_imm(0, 14), 1, 0, 0, 1, rand_imm(136, 2040, 8)),
+        Mips16ExtI8SvrsInstr('save', rand_imm(0, 7), rand_imm(0, 14), 1, 0, 1, 0, rand_imm(136, 2040, 8)),
+        Mips16ExtI8SvrsInstr('save', rand_imm(0, 7), rand_imm(0, 14), 1, 0, 1, 1, rand_imm(136, 2040, 8)),
+        Mips16ExtI8SvrsInstr('save', rand_imm(0, 7), rand_imm(0, 14), 1, 1, 0, 0, rand_imm(136, 2040, 8)),
+        Mips16ExtI8SvrsInstr('save', rand_imm(0, 7), rand_imm(0, 14), 1, 1, 0, 1, rand_imm(136, 2040, 8)),
+        Mips16ExtI8SvrsInstr('save', rand_imm(0, 7), rand_imm(0, 14), 1, 1, 1, 0, rand_imm(136, 2040, 8)),
+        Mips16ExtI8SvrsInstr('save', rand_imm(0, 7), rand_imm(0, 14), 1, 1, 1, 1, rand_imm(136, 2040, 8)),
 
         ##
         # Store byte
@@ -1312,7 +1330,7 @@ if '__main__' == __name__:
         Mips16RRIMemInstr('sb', 0b11000, rand_mips16_reg(), rand_mips16_reg(), rand_imm(0, 31), 0),
         # extended
         Mips16ExtRRIMemInstr('sb', 0b11000, rand_mips16_reg(), rand_mips16_reg(), rand_imm(-32768, -1)),
-        Mips16ExtRRIMemInstr('sb', 0b11000, rand_mips16_reg(), rand_mips16_reg(), rand_imm(1, 32767)),
+        Mips16ExtRRIMemInstr('sb', 0b11000, rand_mips16_reg(), rand_mips16_reg(), rand_imm(32, 32767)),
 
         ##
         # Software debug breakpoint
@@ -1332,7 +1350,7 @@ if '__main__' == __name__:
         Mips16RRIMemInstr('sh', 0b11001, rand_mips16_reg(), rand_mips16_reg(), rand_imm(0, 62, 2), 1),
         # extended
         Mips16ExtRRIMemInstr('sh', 0b11001, rand_mips16_reg(), rand_mips16_reg(), rand_imm(-32768, -1)),
-        Mips16ExtRRIMemInstr('sh', 0b11001, rand_mips16_reg(), rand_mips16_reg(), rand_imm(1, 32767)),
+        Mips16ExtRRIMemInstr('sh', 0b11001, rand_mips16_reg(), rand_mips16_reg(), rand_imm(64, 32767)),
 
         ##
         # Shift word left logical
@@ -1355,7 +1373,7 @@ if '__main__' == __name__:
         Mips16RIInstr('slti', 0b01010, rand_mips16_reg(), rand_imm(0, 255), 0, False),
         # extended
         Mips16ExtRIInstr('slti', 0b01010, rand_mips16_reg(), rand_imm(-32768, -1), 0),
-        Mips16ExtRIInstr('slti', 0b01010, rand_mips16_reg(), rand_imm(1, 32767), 0),
+        Mips16ExtRIInstr('slti', 0b01010, rand_mips16_reg(), rand_imm(256, 32767), 0),
 
         ##
         # Set on less than immediate unsigned
@@ -1363,7 +1381,7 @@ if '__main__' == __name__:
         Mips16RIInstr('sltiu', 0b01011, rand_mips16_reg(), rand_imm(0, 255), 0, False),
         # extended
         Mips16ExtRIInstr('sltiu', 0b01011, rand_mips16_reg(), rand_imm(-32768, -1), 0),
-        Mips16ExtRIInstr('sltiu', 0b01011, rand_mips16_reg(), rand_imm(1, 32767), 0),
+        Mips16ExtRIInstr('sltiu', 0b01011, rand_mips16_reg(), rand_imm(256, 32767), 0),
 
         ##
         # Set on less than unsigned
@@ -1401,7 +1419,7 @@ if '__main__' == __name__:
         Mips16RRIMemInstr('sw', 0b11011, rand_mips16_reg(), rand_mips16_reg(), rand_imm(0, 124, 4), 2),
         # extended
         Mips16ExtRRIMemInstr('sw', 0b11011, rand_mips16_reg(), rand_mips16_reg(), rand_imm(-32768, -1)),
-        Mips16ExtRRIMemInstr('sw', 0b11011, rand_mips16_reg(), rand_mips16_reg(), rand_imm(1, 32767)),
+        Mips16ExtRRIMemInstr('sw', 0b11011, rand_mips16_reg(), rand_mips16_reg(), rand_imm(128, 32767)),
 
         ##
         # Store word SP-relative
@@ -1409,7 +1427,7 @@ if '__main__' == __name__:
         Mips16RIsprelMemInstr('sw', 0b11010, rand_mips16_reg(), rand_imm(0, 1020, 4), 2),
         # extended
         Mips16ExtRIsprelMemInstr('sw', 0b11010, rand_mips16_reg(), rand_imm(-32768, -1), 0),
-        Mips16ExtRIsprelMemInstr('sw', 0b11010, rand_mips16_reg(), rand_imm(1, 32767), 0),
+        Mips16ExtRIsprelMemInstr('sw', 0b11010, rand_mips16_reg(), rand_imm(1024, 32767), 0),
 
         ##
         # Store word in register RA, SP-relative
@@ -1417,7 +1435,7 @@ if '__main__' == __name__:
         Mips16I8SwraSprelInstr('sw', 0b010, rand_imm(4, 1020, 4), 2),
         # extended
         Mips16ExtI8SwraSprelInstr('sw', 0b010, rand_imm(-32768, -1)),
-        Mips16ExtI8SwraSprelInstr('sw', 0b010, rand_imm(1, 32767)),
+        Mips16ExtI8SwraSprelInstr('sw', 0b010, rand_imm(1024, 32767)),
 
         ##
         # Exclusive or
