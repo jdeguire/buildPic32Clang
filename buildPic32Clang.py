@@ -33,17 +33,17 @@
 # buildPic32Clang.py
 #
 # This is a script used to download and build an entire Clang-based toolchain for Microchip
-# Technology's PIC32 and SAM series of microcontroller and (eventually) microprocessor devices.  The
+# Technology's PIC32 and SAM series of microcontroller and (eventually) microprocessor devices. The
 # intent of pic32Clang is to provide a modern toolchain that supports the latest C and C++ standards
-# and tools (such as Clang Tidy).  Use this if you want to be able to use the latest those standards
-# have to offer on your device and are willing to take some risk doing so.  Use XC32 if you're
+# and tools (such as Clang Tidy). Use this if you want to be able to use the latest those standards
+# have to offer on your device and are willing to take some risk doing so. Use XC32 if you're
 # looking for a seemless out-of-the-box experience that will just work with all of Microchip's
 # tools, such as Harmony, and that is fully supported by a team of people who know what they're
 # doing as opposed to the random dude on the internet that wrote this.
 #
 # This toolchain works in tandem with the toolchainPic32Clang plugin for the MPLAB X IDE to provide
 # users with a fully-integrated experience similar to what one would get with a native Microchip
-# product.  The plugin will ensure that the proper options get passed to Clang when building, so at
+# product. The plugin will ensure that the proper options get passed to Clang when building, so at
 # least try it out to see what that looks like, even if you do not plan to use MPLAB X full-time.
 #
 # In addition to Clang itself, this will build libraries needed to support the devices, including
@@ -55,12 +55,12 @@ import subprocess
 import os
 import time
 import shutil
-from pathlib import PurePath, Path
+from pathlib import PurePath
 from typing import NamedTuple
 from typing import List
 
 PIC32_CLANG_VERSION = '0.01'
-SINGLE_STAGE_LLVM = False
+SINGLE_STAGE_LLVM = True
 
 # Note that '/' is an operator for stuff in pathlib that joins path segments.
 ROOT_WORKING_DIR = PurePath('./pic32clang')
@@ -84,7 +84,7 @@ CMAKE_CACHE_DIR = PurePath(os.path.dirname(os.path.realpath(__file__)), 'cmake_c
 
 
 def is_windows():
-    '''Return True if this script is running in a Windows environment.  This returns False when run
+    '''Return True if this script is running in a Windows environment. This returns False when run
     in a shell for the Windows Subsystem for Linux (WSL).
     '''
     return 'nt' == os.name
@@ -113,13 +113,13 @@ def run_subprocess(cmd_args, info_str, working_dir=None, penv=None, use_shell=Fa
     '''Run the given command while printing the given step string at the end of output.
 
     Run the command given by the list cmd_args in which the first item in the list is the name of
-    the command or executable and every item after are arguments.  Normally, arguments are separated
+    the command or executable and every item after are arguments. Normally, arguments are separated
     at the spaces in the command line. See the subprocess module for more info.
 
     The second argument is a string that will be always shown at the end of the output and is used
-    to give info to the user about what the command is doing.  This can be empty to show nothing.
+    to give info to the user about what the command is doing. This can be empty to show nothing.
 
-    The third argument is the working directory that should be set before running the command.  This
+    The third argument is the working directory that should be set before running the command. This
     can be None to have the command use the current working directory (the directory from which this
     script was run). This can be a string or a path-like object, such as something from pathlib.
 
@@ -145,7 +145,7 @@ def run_subprocess(cmd_args, info_str, working_dir=None, penv=None, use_shell=Fa
 
     while None == proc.poll():
         while True:
-            # We need a number here or else this will block.  On Unix, we can use os.set_blocking()
+            # We need a number here or else this will block. On Unix, we can use os.set_blocking()
             # to disable this, but not on Windows.
             output = proc.stdout.read(2048).decode('utf-8', 'backslashreplace')
             if not output:
@@ -171,7 +171,7 @@ def run_subprocess(cmd_args, info_str, working_dir=None, penv=None, use_shell=Fa
         print_line_with_info_str(remaining_output, info_str)
 
     # For now, emulate what subprocess.run() would have done on a non-zero return code, which is
-    # raise CalledProcessError.  This will include the last bit of output from the command as that
+    # raise CalledProcessError. This will include the last bit of output from the command as that
     # may have some useful error info worth checking or showing.
     if proc.returncode != 0:
         # This print makes sure that the info string is still visible when the Python exception info
@@ -185,9 +185,9 @@ def clone_from_git(url, branch=None, dest_directory=None, skip_if_exists=False):
     '''Clone a git repo from the given url.
 
     Clone a git repo by calling out to the locally-installed git executable with the given URL and
-    optional branch and output info.  If the branch is None or empty, this will get the head of the
-    master branch.  If the destination directory is None or empty, this will create a subdirectory
-    in the current working directory named after the project being cloned.  If skip_if_exists is
+    optional branch and output info. If the branch is None or empty, this will get the head of the
+    master branch. If the destination directory is None or empty, this will create a subdirectory
+    in the current working directory named after the project being cloned. If skip_if_exists is
     True, then this will look for and inhibit errors given by Git if the destination already exists;
     otherwise, the underlying subprocess code will throw a subprocess.CalledProcessError.
     '''
@@ -247,22 +247,23 @@ class ArmVariant(TargetVariant):
         return super().__new__(cls, 'arm', 'arm-none-eabi-musl', multilib_path, common_opts + options)
 
 TARGETS = [
-    Mips32Variant(PurePath('r2'),
-                    ['-march=mips32r2', '-msoft-float']),
+
+#    Mips32Variant(PurePath('r2'),
+#                    ['-march=mips32r2', '-msoft-float']),
 #    Mips32Variant(PurePath('r2/mips16'),
 #                    ['-march=mips32r2', '-mips16', '-msoft-float']),
-    Mips32Variant(PurePath('r2/micromips'),
-                    ['-march=mips32r2', '-mmicromips', '-msoft-float']),
-    Mips32Variant(PurePath('r2/micromips/dspr2'),
-                    ['-march=mips32r2', '-mmicromips', '-mdspr2', '-msoft-float']),
-    Mips32Variant(PurePath('r2/dspr2'),
-                    ['-march=mips32r2', '-mdspr2', '-msoft-float']),
-    Mips32Variant(PurePath('r5/dspr2'),
-                    ['-march=mips32r5', '-mdspr2', '-msoft-float']),
-    Mips32Variant(PurePath('r5/dspr2/fpu64'),
-                    ['-march=mips32r5', '-mdspr2', '-mhard-float', '-mfp64']),
-    Mips32Variant(PurePath('r5/micromips/dspr2'),
-                    ['-march=mips32r5', '-mmicromips', '-mdspr2', '-msoft-float']),
+#    Mips32Variant(PurePath('r2/micromips'),
+#                    ['-march=mips32r2', '-mmicromips', '-msoft-float']),
+#    Mips32Variant(PurePath('r2/micromips/dspr2'),
+#                    ['-march=mips32r2', '-mmicromips', '-mdspr2', '-msoft-float']),
+#    Mips32Variant(PurePath('r2/dspr2'),
+#                    ['-march=mips32r2', '-mdspr2', '-msoft-float']),
+#    Mips32Variant(PurePath('r5/dspr2'),
+#                    ['-march=mips32r5', '-mdspr2', '-msoft-float']),
+#    Mips32Variant(PurePath('r5/dspr2/fpu64'),
+#                    ['-march=mips32r5', '-mdspr2', '-mhard-float', '-mfp64']),
+#    Mips32Variant(PurePath('r5/micromips/dspr2'),
+#                    ['-march=mips32r5', '-mmicromips', '-mdspr2', '-msoft-float']),
 #    Mips32Variant(PurePath('r5/micromips/dspr2/fpu64'),
 #                    ['-march=mips32r5', '-mmicromips', '-mdspr2', '-mhard-float', '-mfp64']),
 
@@ -512,10 +513,9 @@ def build_musl(variant):
 def build_llvm_runtimes(variant):
     '''Build LLVM runtime libraries for a single build variant.
 
-    Build libc++, libc++abi, libunwind, and the non-builtin parts of Compiler-RT for the given build
-    variant using its build options. The build and install paths of the libraries are determined by 
-    the path provided by the variant. This needs to be called after LLVM itself, the built-in 
-    functions from Compiler-RT, and Musl have been built.
+    Build libc++, libc++abi, libunwind, and Compiler-RT for the given build variant using its build
+    options. The build and install paths of the libraries are determined by the path provided by the
+    variant. This needs to be called after LLVM and Musl have been built.
     '''
     build_dir = get_lib_build_dir('runtimes', variant)
     prefix = get_lib_install_prefix(variant)
@@ -551,11 +551,11 @@ def build_llvm_runtimes(variant):
 
 
 
-# This is true when this file is executed as a script rather than imported into another file.  We
+# This is true when this file is executed as a script rather than imported into another file. We
 # probably don't need this, but there's no harm in checking.
 if '__main__' == __name__:
     # Windows 10 has supported ANSI escape codes for a while, but it has to be enabled and Python on
-    # Windows (checked with 3.8) does not do that.  This odd workaround came from
+    # Windows (checked with 3.8) does not do that. This odd workaround came from
     # https://bugs.python.org/issue30075.
     if is_windows():
         subprocess.call('', shell=True)
@@ -563,20 +563,20 @@ if '__main__' == __name__:
     clone_from_git(LLVM_REPO_URL, LLVM_RELEASE_BRANCH, LLVM_SRC_DIR, skip_if_exists=True)
     clone_from_git(MUSL_REPO_URL, MUSL_RELEASE_BRANCH, MUSL_SRC_DIR, skip_if_exists=True)
 
-    #if SINGLE_STAGE_LLVM:
-    #    build_single_stage_llvm()
-    #else:
-    #    build_two_stage_llvm()
-
-    build_variants = create_build_variants()
-    if False:
-        for variant in build_variants:
-            build_musl(variant)
-            #build_llvm_builtins(variant)
-            build_llvm_runtimes(variant)
+    if SINGLE_STAGE_LLVM:
+        build_single_stage_llvm()
     else:
-        build_musl(build_variants[0])
-        build_llvm_runtimes(build_variants[0])
+        build_two_stage_llvm()
+
+    #build_variants = create_build_variants()
+    #if True:
+    #    for variant in build_variants:
+    #        build_musl(variant)
+    #        #build_llvm_builtins(variant)
+    #        build_llvm_runtimes(variant)
+    #else:
+    #    build_musl(build_variants[0])
+    #    build_llvm_runtimes(build_variants[0])
 
     # Do this extra print because otherwise the info string will be below where the command prompt
     # re-appears after this ends.

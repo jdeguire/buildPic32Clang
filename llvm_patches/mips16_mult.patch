@@ -1180,6 +1180,7 @@ index 990202b23bc0..c4a43d44b7c4 100644
 -  let isCommutable = 1;
 -  let hasSideEffects = 0;
 +def MultRxRy16: FRR16_mult_ins<0b11000, "mult", IIM16Alu> {
++  let isCommutable = 1;
    let Defs = [HI0, LO0];
  }
  
@@ -1192,6 +1193,7 @@ index 990202b23bc0..c4a43d44b7c4 100644
 -  let isCommutable = 1;
 -  let hasSideEffects = 0;
 +def MultuRxRy16: FRR16_mult_ins<0b11001, "multu", IIM16Alu> {
++  let isCommutable = 1;
    let Defs = [HI0, LO0];
  }
  
