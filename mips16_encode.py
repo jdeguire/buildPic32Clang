@@ -248,11 +248,18 @@ class Mips16Instr:
 
     def get_encoding_as_bytes(self, byteorder):
         if self._is32bit:
-            len = 4
-        else:
-            len = 2
+            # MIPS16 32-bit instructions are treated like two 16-bit instructions when it comes to
+            # encoding. This only matters when using little-endian order.
+            if 'little' == byteorder:
+                top = (self._encoding >> 16) & 0xFFFF
+                bot = self._encoding & 0xFFFF
 
-        return self._encoding.to_bytes(len, byteorder)
+                return top.to_bytes(2, byteorder) + bot.to_bytes(2, byteorder)
+            if 'big' == byteorder:
+                return self._encoding.to_bytes(4, byteorder)
+        else:
+            return self._encoding.to_bytes(2, byteorder)
+
 
     def _get_register_list(self, reglist):
         '''Parse the register arguments forming a list of registers until either the end of the list
