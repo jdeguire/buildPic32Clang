@@ -311,6 +311,17 @@ class Mips16Instr:
         return (output_regs, num_parsed)
 
 
+class Mips16DelaySlotNop(Mips16Instr):
+    def __init__(self):
+        nop = Mips16I8Instr('nop', 0b101, 0, 0)
+        self._name = nop._name
+        self._args = nop._args
+        self._encoding = nop._encoding
+        self._is32bit = nop._is32bit
+
+    def get_instr_string(self):
+        return '# Delay slot nop'    
+
 class Mips16IInstr(Mips16Instr):
     def __init__(self, name, op, imm, instr_shift):
         super().__init__(name)
@@ -320,10 +331,7 @@ class Mips16IInstr(Mips16Instr):
 
         shifted_imm = imm >> instr_shift
 
-        # This format is used only for branch instructions and the assembler expects the argument
-        # to be odd to indicate that a jump to MIPS16 code is occurring. This does not appear to be
-        # encoded in the instruction because it cannot jump to MIPS32.
-        self._args = (imm | 0x01,)
+        self._args = (imm,)
         self._encoding = (op << 11) | (shifted_imm & 0x7FF)
         self._is32bit = False
 
@@ -340,12 +348,6 @@ class Mips16RIInstr(Mips16Instr):
 
         rx_num = MIPS16_REGS[rx]
         shifted_imm = imm >> instr_shift
-
-        # Instructions starting with 'b' are branch instructions and the assembler expects their
-        # immediate argument to be odd to indicate a jump to a MIPS16 instruction. Branch 
-        # instructions cannot jump to MIPS32 mode, so the bit is not part of the encoding.
-        if name.startswith('b'):
-            imm = imm | 0x01
 
         self._args = (rx, imm)
         self._encoding = (op << 11) | (rx_num << 8) | (shifted_imm & 0xFF)
@@ -567,12 +569,6 @@ class Mips16I8Instr(Mips16Instr):
 
         shifted_imm = imm >> instr_shift
 
-        # Instructions starting with 'b' are branch instructions and the assembler expects their
-        # immediate argument to be odd to indicate a jump to a MIPS16 instruction. Branch 
-        # instructions cannot jump to MIPS32 mode, so the bit is not part of the encoding.
-        if name.startswith('b'):
-            imm = imm | 0x01
-
         if 'nop' != name  or  0 != imm:
             self._args = (imm,)
 
@@ -700,10 +696,7 @@ class Mips16ExtIInstr(Mips16Instr):
         si_15_11 = extract_bits(shifted_imm, 15, 11)
         si_4_0 = shifted_imm & 0x1F
 
-        # This format is used only for branch instructions and the assembler expects the argument
-        # to be odd to indicate that a jump to MIPS16 code is occurring. This does not appear to be
-        # encoded in the instruction because it cannot jump to MIPS32.
-        self._args = (imm | 0x01,)
+        self._args = (imm,)
         self._encoding = EXTEND_op | (si_10_5 << 21) | (si_15_11 << 16) | (op << 11) | si_4_0
         self._is32bit = True
 
@@ -737,12 +730,6 @@ class Mips16ExtRIInstr(Mips16Instr):
         si_10_5 = extract_bits(shifted_imm, 10, 5)
         si_15_11 = extract_bits(shifted_imm, 15, 11)
         si_4_0 = shifted_imm & 0x1F
-
-        # Instructions starting with 'b' are branch instructions and the assembler expects their
-        # immediate argument to be odd to indicate a jump to a MIPS16 instruction. Branch 
-        # instructions cannot jump to MIPS32 mode, so the bit is not part of the encoding.
-        if name.startswith('b'):
-            imm = imm | 0x01
 
         self._args = (rx, imm)
         self._encoding = (EXTEND_op | (si_10_5 << 21) | (si_15_11 << 16) | (op << 11) |
@@ -916,12 +903,6 @@ class Mips16ExtI8Instr(Mips16Instr):
         si_10_5 = extract_bits(shifted_imm, 10, 5)
         si_15_11 = extract_bits(shifted_imm, 15, 11)
         si_4_0 = shifted_imm & 0x1F
-
-        # Instructions starting with 'b' are branch instructions and the assembler expects their
-        # immediate argument to be odd to indicate a jump to a MIPS16 instruction. Branch 
-        # instructions cannot jump to MIPS32 mode, so the bit is not part of the encoding.
-        if name.startswith('b'):
-            imm = imm | 0x01
 
         self._args = (imm,)
         self._encoding = EXTI8_op | (si_10_5 << 21) | (si_15_11 << 16) | (funct << 8) | si_4_0
@@ -1157,10 +1138,12 @@ if '__main__' == __name__:
         ##
         # Jump and link
         Mips16JalInstr('jal', 0, rand_imm(4, (1<<28)-4, 4), 2),
+        Mips16DelaySlotNop(),
 
         ##
         # Jump and link register
         Mips16RRjalrcInstr('jalr', rand_mips16_reg(), True, 0b010),
+        Mips16DelaySlotNop(),
 
         ##
         # Jump and link register compact
@@ -1169,15 +1152,18 @@ if '__main__' == __name__:
         ##
         # Jump and link exchange (MIPS16 format)
         Mips16JalInstr('jalx', 1, rand_imm(4, (1<<28)-4, 4), 2),
+        Mips16DelaySlotNop(),
 
         ##
         # Jump register through ra
         Mips16RRjalrcraInstr('jr', 0b001),
+        Mips16DelaySlotNop(),
 
         ##
         # Jump register through MIPS16 GPR
         Mips16RRjalrcInstr('jr', rand_mips16_reg(), False, 0b000),
-
+        Mips16DelaySlotNop(),
+    
         ##
         # Jump register through ra compact
         Mips16RRjalrcraInstr('jrc', 0b101),
