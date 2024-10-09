@@ -60,7 +60,7 @@ from typing import NamedTuple
 from typing import List
 
 PIC32_CLANG_VERSION = '0.01'
-SINGLE_STAGE_LLVM = True
+SINGLE_STAGE_LLVM = False
 
 # Note that '/' is an operator for stuff in pathlib that joins path segments.
 ROOT_WORKING_DIR = PurePath('./pic32clang')
@@ -568,15 +568,15 @@ if '__main__' == __name__:
     else:
         build_two_stage_llvm()
 
-    #build_variants = create_build_variants()
-    #if True:
-    #    for variant in build_variants:
-    #        build_musl(variant)
-    #        #build_llvm_builtins(variant)
-    #        build_llvm_runtimes(variant)
-    #else:
-    #    build_musl(build_variants[0])
-    #    build_llvm_runtimes(build_variants[0])
+    build_variants = create_build_variants()
+    if True:
+       for variant in build_variants:
+           build_musl(variant)
+           #build_llvm_builtins(variant)
+           build_llvm_runtimes(variant)
+    else:
+       build_musl(build_variants[0])
+       build_llvm_runtimes(build_variants[0])
 
     # Do this extra print because otherwise the info string will be below where the command prompt
     # re-appears after this ends.
