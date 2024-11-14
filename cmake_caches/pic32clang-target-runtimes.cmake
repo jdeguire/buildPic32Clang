@@ -16,7 +16,7 @@
 # -----
 
 # This is the target triple that will be passed to Clang when building the runtimes,
-# such as "mipsel-linux-gnu-musl" or "arm-none-eabi-musl".
+# such as "mipsel-linux-gnu" or "arm-none-eabi".
 set(PIC32CLANG_TARGET_TRIPLE "" CACHE STRING "The target triple for which to build the runtimes")
 
 # This is a semicolon-delimited list of extra flags to use when building the runtime 

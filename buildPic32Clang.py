@@ -60,7 +60,8 @@ from typing import NamedTuple
 from typing import List
 
 PIC32_CLANG_VERSION = '0.01'
-SINGLE_STAGE_LLVM = False
+# SINGLE_STAGE_LLVM = False
+SINGLE_STAGE_LLVM = True
 
 # Note that '/' is an operator for stuff in pathlib that joins path segments.
 ROOT_WORKING_DIR = PurePath('./pic32clang')
@@ -77,7 +78,7 @@ LLVM_SRC_DIR = ROOT_WORKING_DIR / 'llvm'
 #MUSL_REPO_URL = 'https://git.musl-libc.org/cgit/musl.git'
 #MUSL_RELEASE_BRANCH = ''
 MUSL_REPO_URL = 'https://github.com/jdeguire/musl.git'
-MUSL_RELEASE_BRANCH = 'v1.2.2_baremetal'
+MUSL_RELEASE_BRANCH = 'arm_cortex_m'
 MUSL_SRC_DIR = ROOT_WORKING_DIR / 'musl'
 
 CMAKE_CACHE_DIR = PurePath(os.path.dirname(os.path.realpath(__file__)), 'cmake_caches')
@@ -236,69 +237,74 @@ class Mips32Variant(TargetVariant):
     def __new__(cls, multilib_path, options):
         # '-G0' prevents libraries from putting small globals into the small data sections. This
         # is the safest option since an application can control the size threshold with '-G<size>'.
-        common_opts = ['-target', 'mipsel-linux-gnu-musl', '-G0', '-fomit-frame-pointer']
-        return super().__new__(cls, 'mips32', 'mipsel-linux-gnu-musl', multilib_path, common_opts + options)
+        common_opts = ['-target', 'mipsel-linux-gnu', '-G0', '-fomit-frame-pointer']
+        return super().__new__(cls, 'mips32', 'mipsel-linux-gnu', multilib_path, common_opts + options)
 
 class ArmVariant(TargetVariant):
     def __new__(cls, multilib_path, options):
         # The '-mimplicit-it' flag is needed for Musl. Whatever options I'm passing are causing the
         # Musl configure script to not pick that up automatically.
-        common_opts = ['-target', 'arm-none-eabi-musl', '-mimplicit-it=always', '-fomit-frame-pointer']
-        return super().__new__(cls, 'arm', 'arm-none-eabi-musl', multilib_path, common_opts + options)
+        common_opts = ['-target', 'arm-none-eabi', '-mimplicit-it=always', '-fomit-frame-pointer']
+        return super().__new__(cls, 'arm', 'arm-none-eabi', multilib_path, common_opts + options)
 
 TARGETS = [
 
-#    Mips32Variant(PurePath('r2'),
-#                    ['-march=mips32r2', '-msoft-float']),
-#    Mips32Variant(PurePath('r2/mips16'),
-#                    ['-march=mips32r2', '-mips16', '-msoft-float']),
-#    Mips32Variant(PurePath('r2/micromips'),
-#                    ['-march=mips32r2', '-mmicromips', '-msoft-float']),
-#    Mips32Variant(PurePath('r2/micromips/dspr2'),
-#                    ['-march=mips32r2', '-mmicromips', '-mdspr2', '-msoft-float']),
-#    Mips32Variant(PurePath('r2/dspr2'),
-#                    ['-march=mips32r2', '-mdspr2', '-msoft-float']),
-#    Mips32Variant(PurePath('r5/dspr2'),
-#                    ['-march=mips32r5', '-mdspr2', '-msoft-float']),
-#    Mips32Variant(PurePath('r5/dspr2/fpu64'),
-#                    ['-march=mips32r5', '-mdspr2', '-mhard-float', '-mfp64']),
-#    Mips32Variant(PurePath('r5/micromips/dspr2'),
-#                    ['-march=mips32r5', '-mmicromips', '-mdspr2', '-msoft-float']),
-#    Mips32Variant(PurePath('r5/micromips/dspr2/fpu64'),
-#                    ['-march=mips32r5', '-mmicromips', '-mdspr2', '-mhard-float', '-mfp64']),
+    # Mips32Variant(PurePath('r2'),
+    #                 ['-march=mips32r2', '-msoft-float']),
+    # Mips32Variant(PurePath('r2/mips16'),
+    #                 ['-march=mips32r2', '-mips16', '-msoft-float']),
+    # Mips32Variant(PurePath('r2/micromips'),
+    #                 ['-march=mips32r2', '-mmicromips', '-msoft-float']),
+    # Mips32Variant(PurePath('r2/micromips/dspr2'),
+    #                 ['-march=mips32r2', '-mmicromips', '-mdspr2', '-msoft-float']),
+    # Mips32Variant(PurePath('r2/dspr2'),
+    #                 ['-march=mips32r2', '-mdspr2', '-msoft-float']),
+    # Mips32Variant(PurePath('r5/dspr2'),
+    #                 ['-march=mips32r5', '-mdspr2', '-msoft-float']),
+    # Mips32Variant(PurePath('r5/dspr2/fpu64'),
+    #                 ['-march=mips32r5', '-mdspr2', '-mhard-float', '-mfp64']),
+    # Mips32Variant(PurePath('r5/micromips/dspr2'),
+    #                 ['-march=mips32r5', '-mmicromips', '-mdspr2', '-msoft-float']),
+    # Mips32Variant(PurePath('r5/micromips/dspr2/fpu64'),
+    #                 ['-march=mips32r5', '-mmicromips', '-mdspr2', '-mhard-float', '-mfp64']),
 
-    ArmVariant(PurePath('v6m'),
-                ['-march=armv6m', '-msoft-float', '-mfloat-abi=soft']),
-    ArmVariant(PurePath('v7m'),
-                ['-march=armv7m', '-msoft-float', '-mfloat-abi=soft']),
-    ArmVariant(PurePath('v7em'),
-                ['-march=armv7em', '-msoft-float', '-mfloat-abi=soft']),
+    ArmVariant(PurePath('v6m/nofp'),
+                ['-march=armv6m', '-mfpu=none', '-mfloat-abi=soft']),
+    ArmVariant(PurePath('v7m/nofp'),
+                ['-march=armv7m', '-mfpu=none', '-mfloat-abi=soft']),
+    ArmVariant(PurePath('v7em/nofp'),
+                ['-march=armv7em', '-mfpu=none', '-mfloat-abi=soft']),
     ArmVariant(PurePath('v7em/fpv4-sp-d16'),
                 ['-march=armv7em', '-mfpu=fpv4-sp-d16', '-mfloat-abi=hard']),
     ArmVariant(PurePath('v7em/fpv5-d16'),
                 ['-march=armv7em', '-mfpu=fpv5-d16', '-mfloat-abi=hard']),
-    ArmVariant(PurePath('v8m.base'),
-                ['-march=armv8m.base', '-msoft-float', '-mfloat-abi=soft']),
-#    ArmVariant(PurePath('v8m.main'),
-#                ['-march=armv8m.main', '-msoft-float', '-mfloat-abi=soft']),
-#    ArmVariant(PurePath('v8m.main/fpv5-sp-d16'),
-#                ['-march=armv8m.main', '-mfpu=fpv5-sp-d16', '-mfloat-abi=hard']),
-#    ArmVariant(PurePath('v8.1m.main'),
-#                ['-march=armv8.1m.main', '-msoft-float', '-mfloat-abi=soft']),
-#    ArmVariant(PurePath('v8.1m.main/fp-armv8-fullfp16-d16'),
-#                ['-march=armv8m.main+mve.fp+fp.dp', '-mfpu=fp-armv8-fullfp16-d16', '-mfloat-abi=hard']),
-    ArmVariant(PurePath('v7a'),
-                ['-march=armv7a', '-msoft-float', '-mfloat-abi=soft']),
-    ArmVariant(PurePath('v7a/vfpv4-d16'),
-                ['-march=armv7em', '-mfpu=vfpv4-d16', '-mfloat-abi=hard']),
-    ArmVariant(PurePath('v7a/neon-vfpv4'),
-                ['-march=armv7em', '-mfpu=neon-vfpv4', '-mfloat-abi=hard']),
-    ArmVariant(PurePath('v7a/thumb'),
-                ['-march=armv7a', '-mthumb', '-msoft-float', '-mfloat-abi=soft']),
-    ArmVariant(PurePath('v7a/thumb/vfpv4-d16'),
-                ['-march=armv7em', '-mthumb', '-mfpu=vfpv4-d16', '-mfloat-abi=hard']),
-    ArmVariant(PurePath('v7a/thumb/neon-vfpv4'),
-                ['-march=armv7em', '-mthumb', '-mfpu=neon-vfpv4', '-mfloat-abi=hard']),
+    ArmVariant(PurePath('v8m.base/nofp'),
+                ['-march=armv8m.base', '-mfpu=none', '-mfloat-abi=soft']),
+    ArmVariant(PurePath('v8m.main/nofp'),
+                ['-march=armv8m.main', '-mfpu=none', '-mfloat-abi=soft']),
+    ArmVariant(PurePath('v8m.main/fpv5-sp-d16'),
+                ['-march=armv8m.main', '-mfpu=fpv5-sp-d16', '-mfloat-abi=hard']),
+    ArmVariant(PurePath('v8.1m.main/nofp/nomve'),
+                ['-march=armv8.1m.main', '-mfpu=none', '-mfloat-abi=soft']),
+    ArmVariant(PurePath('v8.1m.main/nofp/mve'),
+                ['-march=armv8m.main+mve', '-mfpu=none', '-mfloat-abi=hard']), # MVE needs hard ABI
+    ArmVariant(PurePath('v8.1m.main/fp-armv8-fullfp16-d16/nomve'),
+                ['-march=armv8m.main', '-mfpu=fp-armv8-fullfp16-d16', '-mfloat-abi=hard']),
+    ArmVariant(PurePath('v8.1m.main/fp-armv8-fullfp16-d16/mve'),
+                ['-march=armv8m.main+mve.fp+fp.dp', '-mfpu=fp-armv8-fullfp16-d16', '-mfloat-abi=hard']),
+
+    # ArmVariant(PurePath('v7a/nofp'),
+    #             ['-march=armv7a', '-mfpu=none', '-mfloat-abi=soft']),
+    # ArmVariant(PurePath('v7a/vfpv4-d16'),
+    #             ['-march=armv7em', '-mfpu=vfpv4-d16', '-mfloat-abi=hard']),
+    # ArmVariant(PurePath('v7a/neon-vfpv4'),
+    #             ['-march=armv7em', '-mfpu=neon-vfpv4', '-mfloat-abi=hard']),
+    # ArmVariant(PurePath('v7a/thumb/nofp'),
+    #             ['-march=armv7a', '-mthumb', '-mfpu=none', '-mfloat-abi=soft']),
+    # ArmVariant(PurePath('v7a/thumb/vfpv4-d16'),
+    #             ['-march=armv7em', '-mthumb', '-mfpu=vfpv4-d16', '-mfloat-abi=hard']),
+    # ArmVariant(PurePath('v7a/thumb/neon-vfpv4'),
+    #             ['-march=armv7em', '-mthumb', '-mfpu=neon-vfpv4', '-mfloat-abi=hard']),
     ]
 
 def create_build_variants():
@@ -309,12 +315,18 @@ def create_build_variants():
     the optimization options used to build them. Each optimization variant also has its own path
     '''
     variants = []
-    opts = [(PurePath('.'),  ['-O0']),
-            (PurePath('o1'), ['-O1']),
-            (PurePath('o2'), ['-O2']),
-            (PurePath('o3'), ['-O3']),
-            (PurePath('os'), ['-Os']),
-            (PurePath('oz'), ['-Oz'])]
+    # opts = [(PurePath('.'),  ['-O0']),
+    #         (PurePath('o1'), ['-O1']),
+    #         (PurePath('o2'), ['-O2']),
+    #         (PurePath('o3'), ['-O3']),
+    #         (PurePath('os'), ['-Os']),
+    #         (PurePath('oz'), ['-Oz'])]
+    
+    # Clang's multilib support looks for architecture options (like --target and -march),
+    # -f(no-)rtti, and -f(no-)exceptions. It cannot differentiate based on other options, like
+    # optimization levels. For now, just use -O2. We might need to handle the -fexceptions and
+    # -frtti options in the future.
+    opts = [(PurePath('.'), ['-O2'])]
 
     for target in TARGETS:
         for opt in opts:
@@ -349,9 +361,10 @@ def build_single_stage_llvm():
 
     gen_build_cmd = ['cmake', '-G', 'Ninja',
                      '-DCMAKE_INSTALL_PREFIX=' + install_dir,
-                     '-DCMAKE_BUILD_TYPE=Debug',
-                     '-DCMAKE_C_FLAGS_DEBUG=-O1 -g',
-                     '-DCMAKE_CXX_FLAGS_DEBUG=-O1 -g',
+                    #  '-DCMAKE_BUILD_TYPE=Debug',
+                    #  '-DCMAKE_C_FLAGS_DEBUG=-O1 -g',
+                    #  '-DCMAKE_CXX_FLAGS_DEBUG=-O1 -g',
+                     '-DCMAKE_BUILD_TYPE=RelWithDebInfo',
                      '-DLLVM_ENABLE_LTO=OFF',
                      '-DLLVM_OPTIMIZED_TABLEGEN=ON',
                      '-DLLVM_USE_SPLIT_DWARF=ON',
