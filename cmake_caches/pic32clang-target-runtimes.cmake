@@ -129,8 +129,13 @@ set(COMPILER_RT_BUILD_XRAY OFF CACHE BOOL "")
 set(COMPILER_RT_BUILD_LIBFUZZER OFF CACHE BOOL "")
 set(COMPILER_RT_BUILD_PROFILE OFF CACHE BOOL "")
 set(COMPILER_RT_BUILD_MEMPROF OFF CACHE BOOL "")
+set(COMPILER_RT_BUILD_CTX_PROFILE OFF CACHE BOOL "")
+# Comment this out for now because it causes an error about not being able to find
+# the builtins library for the target architecture. 
 #set(COMPILER_RT_USE_BUILTINS_LIBRARY ON CACHE BOOL "")
-set(COMPILER_RT_EXCLUDE_ATOMIC_BUILTIN OFF CACHE BOOL "")
+# Exclude this because it fails to build on Armv6-m. That arch does not support the instructions
+# to allow atomic access. In the future it might be possible to enable this for all but Armv6-m.
+set(COMPILER_RT_EXCLUDE_ATOMIC_BUILTIN ON CACHE BOOL "")
 
 set(LIBUNWIND_ENABLE_STATIC ON CACHE BOOL "")
 set(LIBUNWIND_ENABLE_SHARED OFF CACHE BOOL "")
@@ -147,6 +152,7 @@ set(LIBCXX_CXX_ABI libcxxabi CACHE STRING "")
 set(LIBCXX_USE_COMPILER_RT ON CACHE BOOL "")
 set(LIBCXX_USE_LLVM_UNWINDER ON CACHE BOOL "")
 set(LIBCXX_HAS_PTHREAD_API ON CACHE BOOL "")
+set(LIBCXX_ENABLE_TIME_ZONE_DATABASE OFF CACHE BOOL "")
 
 set(LIBCXXABI_BAREMETAL ON CACHE BOOL "")
 set(LIBCXXABI_ENABLE_STATIC ON CACHE BOOL "")
