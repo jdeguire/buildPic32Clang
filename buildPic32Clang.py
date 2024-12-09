@@ -55,23 +55,31 @@ import argparse
 import os
 from pathlib import Path
 import pic32_target_variants
+from pic32_target_variants import TargetVariant
 import shutil
 import subprocess
 import time
 import tkinter
+import tkinter.filedialog
 
 PIC32_CLANG_VERSION = '0.01'
-# SINGLE_STAGE_LLVM = False
-SINGLE_STAGE_LLVM = True
+PIC32_CLANG_PROJECT_URL = 'https://github.com/jdeguire/buildPic32Clang'
 
 # '/' is an operator for stuff in pathlib that joins path segments.
 ROOT_WORKING_DIR = Path('./pic32clang')
 BUILD_PREFIX = ROOT_WORKING_DIR / 'build'
 INSTALL_PREFIX = ROOT_WORKING_DIR / 'install'
 
+CMAKE_CACHE_DIR = Path(os.path.dirname(os.path.realpath(__file__)), 'cmake_caches')
+
+
+# These are the build steps this script can do. The steps to be done can be given on the 
+# command line or 'all' can be used to do all of these.
+ALL_BUILD_STEPS = ['clone', 'llvm', 'musl', 'runtimes', 'devfiles', 'cmsis']
+
+
 LLVM_REPO_URL = 'https://github.com/llvm/llvm-project.git'
-#LLVM_RELEASE_BRANCH = 'llvmorg-11.0.1'
-LLVM_RELEASE_BRANCH = ''
+LLVM_REPO_BRANCH = 'llvmorg-19.1.5'
 LLVM_SRC_DIR = ROOT_WORKING_DIR / 'llvm'
 
 # Use my clone of Musl for now because it will contain mods to get it to work
@@ -79,13 +87,19 @@ LLVM_SRC_DIR = ROOT_WORKING_DIR / 'llvm'
 #MUSL_REPO_URL = 'https://git.musl-libc.org/cgit/musl.git'
 #MUSL_RELEASE_BRANCH = ''
 MUSL_REPO_URL = 'https://github.com/jdeguire/musl.git'
-MUSL_RELEASE_BRANCH = 'arm_cortex_m'
+MUSL_REPO_BRANCH = 'arm_cortex_m'
 MUSL_SRC_DIR = ROOT_WORKING_DIR / 'musl'
 
-CMAKE_CACHE_DIR = Path(os.path.dirname(os.path.realpath(__file__)), 'cmake_caches')
+PIC32_FILE_MAKER_REPO_URL = 'https://github.com/jdeguire/pic32-device-file-maker.git'
+PIC32_FILE_MAKER_SRC_DIR = ROOT_WORKING_DIR / 'pic32-device-file-maker'
+
+CMSIS_REPO_URL = 'https://github.com/ARM-software/CMSIS_6.git'
+CMSIS_REPO_BRANCH = 'v6.1.0'
+CMSIS_SRC_DIR = ROOT_WORKING_DIR / 'cmsis'
 
 
-def get_dir_from_dialog(title: str | None = None, mustexist: bool = True) -> str:
+
+def get_dir_from_dialog(title: str | None = None, mustexist: bool = True) -> str | None:
     '''Open a file dialog asking the user to open a directory, returning what the user selects or
     None if the dialog is cancelled.
 
@@ -94,18 +108,71 @@ def get_dir_from_dialog(title: str | None = None, mustexist: bool = True) -> str
     '''
     tk_root = tkinter.Tk()
     tk_root.withdraw()
-
     return tkinter.filedialog.askdirectory(title=title, mustexist=mustexist)
 
 
-def is_windows():
+def is_windows() -> bool:
     '''Return True if this script is running in a Windows environment. This returns False when run
     in a shell for the Windows Subsystem for Linux (WSL).
     '''
     return 'nt' == os.name
 
 
-def print_line_with_info_str(line, info_str):
+def get_cmake_bool(sel: bool) -> str:
+    '''Return ON or OFF based on the given boolean for use with CMake commands.
+    '''
+    return 'ON' if sel else 'OFF'
+
+
+def get_lib_build_dir(libname: str, variant: TargetVariant) -> Path:
+    '''Get a path relative to this script at which a library build will be performed.
+
+    The path created depends on the path value in the given variant so that each variant has its own
+    build directory.
+    '''
+    return BUILD_PREFIX / libname / variant.arch / variant.path
+
+
+def get_lib_install_prefix(variant: TargetVariant) -> Path:
+    '''Get a path relative to this script that would be used as the "prefix" path for installing the
+    libraries.
+    '''
+    return INSTALL_PREFIX / variant.arch
+
+def get_lib_info_str(variant: TargetVariant) -> str:
+    '''Get a string that can be printed to the console to indicate what variant is being built.
+    '''
+    return str(variant.arch / variant.path)
+
+
+# TODO: All uses of this convert the return value to an absolute path, so maybe this should just return an absolute path.
+def get_lib_build_tool_path(args: argparse.Namespace) -> Path:
+    '''Get the path relative to this script at which a built LLVM/Clang toolchain suitable for
+    building the libraries in this script is located.
+    
+    This returns the top-level directory for the toolchain--that is, the path at which the bin/,
+    lib/, and so on directories are located. This will use the stage 2 build location if able because
+    the LLVM libraries make use of CMake caches and other build items in that location rather than 
+    the final install location.
+    '''
+    if args.single_stage:
+        return BUILD_PREFIX / 'llvm'
+    else:
+        return BUILD_PREFIX / 'llvm' / 'tools' / 'clang' / 'stage2-bins'
+
+
+def remake_dirs(dir: Path) -> None:
+    '''Remove and make the given directory and its subdirectories.
+    
+    Use this to remove build directories so that a clean build is done.
+    '''
+    if os.path.exists(dir):
+        shutil.rmtree(dir)
+
+    os.makedirs(dir)
+
+
+def print_line_with_info_str(line: str, info_str: str) -> None:
     '''Print the given line while also using ANSI control codes to print the given info string in 
     inverted colors below it. The cursor will be on a new line when this is done.
     '''
@@ -124,7 +191,8 @@ def print_line_with_info_str(line, info_str):
     print('\n\n\x1b[7m' + info_str + '\x1b[27m\x1b[K\r\x1b[A', end='', flush=True)
 
 
-def run_subprocess(cmd_args, info_str, working_dir=None, penv=None, use_shell=False):
+def run_subprocess(cmd_args: list[str], info_str: str, working_dir: Path = None, 
+                   penv: dict[str, str] = None, use_shell: bool = False) -> None:
     '''Run the given command while printing the given step string at the end of output.
 
     Run the command given by the list cmd_args in which the first item in the list is the name of
@@ -196,22 +264,32 @@ def run_subprocess(cmd_args, info_str, working_dir=None, penv=None, use_shell=Fa
         raise subprocess.CalledProcessError(proc.returncode, cmd_args, except_output)
 
 
-def clone_from_git(url, branch=None, dest_directory=None, skip_if_exists=False):
+# TODO: Can dest_directory be a Path?
+def clone_from_git(url: str, branch: str = None, dest_directory: str = None,
+                   skip_if_exists: bool = False, full_clone: bool = False) -> None:
     '''Clone a git repo from the given url.
 
     Clone a git repo by calling out to the locally-installed git executable with the given URL and
     optional branch and output info. If the branch is None or empty, this will get the head of the
     master branch. If the destination directory is None or empty, this will create a subdirectory
     in the current working directory named after the project being cloned. If skip_if_exists is
-    True, then this will look for and inhibit errors given by Git if the destination already exists;
-    otherwise, the underlying subprocess code will throw a subprocess.CalledProcessError.
+    True, then this will look for and inhibit errors given by git if the destination already exists;
+    otherwise, the underlying subprocess code will throw a subprocess.CalledProcessError. If 
+    full_clone is True, then this will clone the full repo history; otherwise, only a shallow clone
+    is made by using the "--depth=1" option.
     '''
     cmd = ['git', 'clone']
-# TODO: Use '--depth=1' to get a shallow clone
-# TODO: For Windows, need to add '--config core.autocrlf=false (at least for LLVM)
+
+    if not full_clone:
+        cmd.append('--depth=1')
+
     if branch:
         cmd.append('-b')
         cmd.append(branch)
+
+    if is_windows():
+        cmd.append('--config')
+        cmd.append('core.autocrlf=false')
 
     cmd.append(url)
 
@@ -227,42 +305,50 @@ def clone_from_git(url, branch=None, dest_directory=None, skip_if_exists=False):
             raise
 
 
+def clone_selected_repos_from_git(args: argparse.Namespace) -> None:
+    '''Clone repos from git based on the build steps and command line arguments to this script.
+    '''
+    if args.clone_all  or  'llvm' in args.steps  or  'runtimes' in args.steps:
+        clone_from_git(LLVM_REPO_URL, args.llvm_branch, LLVM_SRC_DIR, 
+                    skip_if_exists=args.skip_existing, full_clone=args.full_clone)
+
+    if args.clone_all or 'musl' in args.steps:
+        clone_from_git(MUSL_REPO_URL, MUSL_REPO_BRANCH, MUSL_SRC_DIR, 
+                    skip_if_exists=args.skip_existing, full_clone=args.full_clone)
+
+    if args.clone_all or 'devfiles' in args.steps:
+        clone_from_git(PIC32_FILE_MAKER_REPO_URL, '', PIC32_FILE_MAKER_SRC_DIR, 
+                    skip_if_exists=args.skip_existing, full_clone=args.full_clone)
+
+    if args.clone_all or 'cmsis' in args.steps:
+        clone_from_git(CMSIS_REPO_URL, args.cmsis_branch, CMSIS_SRC_DIR, 
+                    skip_if_exists=args.skip_existing, full_clone=args.full_clone)
 
 
-def remake_dirs(dir):
-    '''Remove and make the given directory and its subdirectories.
-    
-    Use this to remove build directories so that a clean build is done.'''
-    if os.path.exists(dir):
-        shutil.rmtree(dir)
-
-    os.makedirs(dir)
-
-
-def build_single_stage_llvm():
+def build_single_stage_llvm(args: argparse.Namespace) -> None:
     '''Build LLVM and its associated projects as a single-stage build.
 
     This will remove any previous build directory so that a clean build is always performed. To
     avoid this, enter the directory using a command line and manually start a build from there.
     '''
     build_dir = BUILD_PREFIX / 'llvm'
+# TODO: Pathlib might have relpath stuff now.
     install_dir = os.path.relpath(INSTALL_PREFIX, build_dir)
     src_dir = os.path.relpath(LLVM_SRC_DIR / 'llvm', build_dir)
 
     remake_dirs(build_dir)
 
-    gen_build_cmd = ['cmake', '-G', 'Ninja',
-                     '-DCMAKE_INSTALL_PREFIX=' + install_dir,
-                    #  '-DCMAKE_BUILD_TYPE=Debug',
-                    #  '-DCMAKE_C_FLAGS_DEBUG=-O1 -g',
-                    #  '-DCMAKE_CXX_FLAGS_DEBUG=-O1 -g',
-                     '-DCMAKE_BUILD_TYPE=RelWithDebInfo',
-                     '-DLLVM_ENABLE_LTO=OFF',
-                     '-DLLVM_OPTIMIZED_TABLEGEN=ON',
-                     '-DLLVM_USE_SPLIT_DWARF=ON',
-                     '-DLLVM_TARGETS_TO_BUILD=ARM;Mips',
-                     '-DLLVM_ENABLE_PROJECTS=clang;clang-tools-extra;lld;lldb;polly',
-                     src_dir]
+    gen_build_cmd = [
+        'cmake', '-G', 'Ninja',
+        f'-DCMAKE_INSTALL_PREFIX={install_dir}',
+        f'-DCMAKE_BUILD_TYPE={args.llvm_build_type}',
+        f'-DLLVM_ENABLE_LTO={get_cmake_bool(args.enable_lto)}',
+        '-DLLVM_OPTIMIZED_TABLEGEN=ON',
+        '-DLLVM_USE_SPLIT_DWARF=ON',
+        '-DLLVM_TARGETS_TO_BUILD=ARM;Mips',
+        '-DLLVM_ENABLE_PROJECTS=clang;clang-tools-extra;lld;lldb;polly',
+        src_dir
+    ]
     run_subprocess(gen_build_cmd, 'Generate LLVM build script', build_dir)
 
     build_cmd = ['cmake', '--build', '.']
@@ -272,7 +358,7 @@ def build_single_stage_llvm():
     run_subprocess(install_cmd, 'Install LLVM', build_dir)
 
 
-def build_two_stage_llvm():
+def build_two_stage_llvm(args: argparse.Namespace) -> None:
     '''Build LLVM and its associated projects using a 2-stage build.
 
     This will remove any previous build directory so that a clean build is always performed. To
@@ -291,18 +377,18 @@ def build_two_stage_llvm():
     # llvm/clang/cmake/caches that build a 2-stage distribution of LLVM/Clang. The 'stage1' cache
     # file already references the 'stage2' file, so we don't need to do anything with 'stage2' here.
     #
-    # NOTE: By default, the CMake cache files build the stage2 compiler with LTO. This takes forever
-    # and is not important for testing, so the below command disables it for now.
-    #
     # TODO: There's a CMake variable called PACKAGE_VENDOR that could hold pic32Clang version info.
     #       There's also PACKAGE_VERSION, but that appears to have LLVM's version in it.
-    #       Do I need something like this for Musl?
-    gen_build_cmd = ['cmake', '-G', 'Ninja',
-                     '-DCMAKE_INSTALL_PREFIX=' + install_dir,
-                     '-DBOOTSTRAP_LLVM_ENABLE_LTO=OFF',
-                     '-DBOOTSTRAP_CMAKE_BUILD_TYPE=RelWithDebInfo',
-                     '-C', cmake_config_path,
-                     src_dir]
+    #       Do I put that in the stage1 or stage2 file? Do I add BOOTSTRAP_ to the start? I think so
+    #       since anything starting with BOOTSTRAP_ is passed to the stage2 build automatically.
+    gen_build_cmd = [
+        'cmake', '-G', 'Ninja',
+        f'-DCMAKE_INSTALL_PREFIX={install_dir}',
+        f'-DBOOTSTRAP_LLVM_ENABLE_LTO={get_cmake_bool(args.enable_lto)}',
+        f'-DBOOTSTRAP_CMAKE_BUILD_TYPE={args.llvm_build_type}',
+        '-C', cmake_config_path,
+        src_dir
+    ]
     run_subprocess(gen_build_cmd, 'Generate LLVM build script', build_dir)
 
     build_cmd = ['cmake', '--build', '.', '--target', 'stage2-distribution']
@@ -312,43 +398,7 @@ def build_two_stage_llvm():
     run_subprocess(install_cmd, 'Install LLVM', build_dir)
 
 
-def get_lib_build_dir(libname, variant):
-    '''Get a path relative to this script at which a library build will be performed.
-
-    The path created depends on the path value in the given variant so that each variant has its own
-    build directory.
-    '''
-    return BUILD_PREFIX / libname / variant.arch / variant.path
-
-
-def get_lib_install_prefix(variant):
-    '''Get a path relative to this script that would be used as the "prefix" path for installing the
-    libraries.
-    '''
-    return INSTALL_PREFIX / variant.arch
-
-def get_lib_info_str(variant):
-    '''Get a string that can be printed to the console to indicate what variant is being built.
-    '''
-    return str(variant.arch / variant.path)
-
-
-def get_lib_build_tool_path():
-    '''Get the path relative to this script at which a built LLVM/Clang toolchain suitable for
-    building the libraries in this script is located.
-    
-    This returns the top-level directory for the toolchain--that is, the path at which the bin/,
-    lib/, and so on directories are located. This will use the stage 2 build location if able because
-    the LLVM libraries make use of CMake caches and other build items in that location rather than 
-    the final install location.
-    '''
-    if SINGLE_STAGE_LLVM:
-        return BUILD_PREFIX / 'llvm'
-    else:
-        return BUILD_PREFIX / 'llvm' / 'tools' / 'clang' / 'stage2-bins'
-
-
-def build_musl(variant):
+def build_musl(args: argparse.Namespace, variant: TargetVariant):
     '''Build the Musl C library for a single variant.
 
     Build the Musl library for the given target variant using its build options. The build and install
@@ -359,6 +409,7 @@ def build_musl(variant):
     '''
     build_dir = get_lib_build_dir('musl', variant)
     prefix = get_lib_install_prefix(variant)
+# TODO: Pathlib might have relpath stuff now.
     prefix_dir = os.path.relpath(prefix, build_dir)
     lib_dir = os.path.relpath(prefix / 'lib' / variant.path, build_dir)
     src_dir = os.path.relpath(MUSL_SRC_DIR, build_dir)
@@ -368,7 +419,6 @@ def build_musl(variant):
     num_cpus = os.cpu_count()
     if None == num_cpus or num_cpus < 1:
         num_cpus = 1
-#    num_cpus = 1
 
     #####
     # Notes:
@@ -382,38 +432,43 @@ def build_musl(variant):
     # --For Armv7(E)-M and Armv8M/8.1M Mainline, Clang defines both __thumb__ and __thumb2__.
     # --For Armv6-M and Armv8-M.base, only __thumb__ is defined.
 
+    build_tool_path = get_lib_build_tool_path(args)
+
     build_env = os.environ.copy()
-    build_env['AR'] = os.path.abspath(get_lib_build_tool_path() / 'bin' / 'llvm-ar')
-    build_env['RANLIB'] = os.path.abspath(get_lib_build_tool_path() / 'bin' / 'llvm-ranlib')
-    build_env['CC'] = os.path.abspath(get_lib_build_tool_path() / 'bin' / 'clang')
+# TODO: Pathlib might have abspath stuff now.
+    build_env['AR'] = os.path.abspath(build_tool_path / 'bin' / 'llvm-ar')
+    build_env['RANLIB'] = os.path.abspath(build_tool_path / 'bin' / 'llvm-ranlib')
+    build_env['CC'] = os.path.abspath(build_tool_path / 'bin' / 'clang')
     build_env['CFLAGS'] = ' '.join(variant.options) + ' -gline-tables-only'
 
 # TODO: Does this need to specify a custom version string since this is my branch of Musl?
-    gen_build_cmd = [src_dir + '/configure', 
-                    '--prefix=' + prefix_dir,
-                    '--libdir=' + lib_dir,
-                    '--disable-shared',
-                    '--disable-wrapper',
-                    '--disable-optimize',
-                    '--disable-debug',
-                    '--target=' + variant.triple]
-    gen_build_info = 'Configure Musl (' + get_lib_info_str(variant) + ')'
+    gen_build_cmd = [
+        f'{src_dir}/configure', 
+        f'--prefix={prefix_dir}',
+        f'--libdir={lib_dir}',
+        '--disable-shared',
+        '--disable-wrapper',
+        '--disable-optimize',
+        '--disable-debug',
+        f'--target={variant.triple}'
+    ]
+    gen_build_info = f'Configure Musl ({get_lib_info_str(variant)})'
     run_subprocess(gen_build_cmd, gen_build_info, build_dir, penv=build_env)
 
     clean_cmd = ['make', 'clean']
-    clean_info = 'Clean Musl (' + get_lib_info_str(variant) + ')'
+    clean_info = f'Clean Musl ({get_lib_info_str(variant)})'
     run_subprocess(clean_cmd, clean_info, build_dir, penv=build_env)
 
-    build_cmd = ['make', '-j' + str(num_cpus)]
-    build_info = 'Build Musl (' + get_lib_info_str(variant) + ')'
+    build_cmd = ['make', f'-j{num_cpus})']
+    build_info = f'Build Musl ({get_lib_info_str(variant)})'
     run_subprocess(build_cmd, build_info, build_dir, penv=build_env)
 
     install_cmd = ['make', '-j1', 'install']
-    install_info = 'Install Musl (' + get_lib_info_str(variant) + ')'
+    install_info = f'Install Musl ({get_lib_info_str(variant)})'
     run_subprocess(install_cmd, install_info, build_dir, penv=build_env)
 
 
-def build_llvm_runtimes(variant):
+def build_llvm_runtimes(args: argparse.Namespace, variant: TargetVariant):
     '''Build LLVM runtime libraries for a single build variant.
 
     Build libc++, libc++abi, libunwind, and Compiler-RT for the given build variant using its build
@@ -422,10 +477,11 @@ def build_llvm_runtimes(variant):
     '''
     build_dir = get_lib_build_dir('runtimes', variant)
     prefix = get_lib_install_prefix(variant)
+# TODO: Pathlib might have relpath and abspath stuff now.
     prefix_dir = os.path.relpath(prefix, build_dir)
     src_dir = os.path.relpath(LLVM_SRC_DIR / 'runtimes', build_dir)
 
-    clang_sysroot = os.path.abspath(get_lib_build_tool_path())
+    clang_sysroot = os.path.abspath(get_lib_build_tool_path(args))
     cmake_config_path = os.path.relpath(CMAKE_CACHE_DIR / 'pic32clang-target-runtimes.cmake',
                                              build_dir)
 
@@ -442,63 +498,202 @@ def build_llvm_runtimes(variant):
     #       with Armv6-m. It does not support the Arm atomic access instructions. Could we enable
     #       the atomics support for all other archs and leave out v6m?
     # TODO: Enable LTO and figure out if LTO libraries can be used in non-LTO builds.
-    # TODO: The \' escapes may not be necessary.
-    gen_build_cmd = ['cmake', '-G', 'Ninja', 
-                     '-DCMAKE_INSTALL_PREFIX=\'' + prefix_dir + '\'',
-                     '-DPIC32CLANG_LIBDIR_SUFFIX=\'' + str(variant.path) + '\'',
-                     '-DPIC32CLANG_TARGET_TRIPLE=' + triple_str,
-                     '-DPIC32CLANG_RUNTIME_FLAGS=' + ';'.join(variant.options),
-                     '-DPIC32CLANG_SYSROOT=\'' + clang_sysroot + '\'',
-                     '-C', cmake_config_path,
-                     src_dir]
-    gen_build_info = 'Generate runtimes build script (' + get_lib_info_str(variant) + ')'
+    options_str = ';'.join(variant.options)
+    gen_build_cmd = [
+        'cmake', '-G', 'Ninja', 
+        f'-DCMAKE_INSTALL_PREFIX={prefix_dir}',
+        f'-DPIC32CLANG_LIBDIR_SUFFIX={variant.path.as_posix()}',
+        f'-DPIC32CLANG_TARGET_TRIPLE={triple_str}',
+        f'-DPIC32CLANG_RUNTIME_FLAGS={options_str}',
+        f'-DPIC32CLANG_SYSROOT={clang_sysroot}',
+        '-C', cmake_config_path,
+        src_dir
+    ]
+    gen_build_info = f'Generate runtimes build script ({get_lib_info_str(variant)})'
     run_subprocess(gen_build_cmd, gen_build_info, build_dir)
 
     build_cmd = ['cmake', '--build', '.']
-    build_info = 'Build runtimes (' + get_lib_info_str(variant) + ')'
+    build_info = f'Build runtimes ({get_lib_info_str(variant)})'
     run_subprocess(build_cmd, build_info, build_dir)
 
     install_cmd = ['cmake', '--build', '.', '--target', 'install']
-    install_info = 'Install runtimes (' + get_lib_info_str(variant) + ')'
+    install_info = f'Install runtimes ({get_lib_info_str(variant)})'
     run_subprocess(install_cmd, install_info, build_dir)
 
 
+def get_command_line_arguments() -> argparse.Namespace:
+    '''Return a object containing command line arugments for this script.
 
+    If an error occurs or a command line arugment requests help text or version info, then this will
+    exit the program after printing the appropriate info instead of returning.
+    '''
+    desc_str = \
+        'Build a complete Clang toolchain for your PIC32 and SAM devices (Cortex-M only for now).' 
+
+    epilog_str = \
+        'See the README file for more information about the arguments and running this script.'        
+
+    version_str = \
+        f'buildPic32Clang {PIC32_CLANG_VERSION} ({PIC32_CLANG_PROJECT_URL})'
+
+    # Create a help formatter that gives a bit more space between the option and help text.
+    # The default seems to be 24 characters. This solution was found on:
+    # https://stackoverflow.com/questions/52605094/python-argparse-increase-space-between-parameter-and-description
+    wider_formatter = lambda prog: argparse.ArgumentDefaultsHelpFormatter(prog, max_help_position=28)
+
+    parser = argparse.ArgumentParser(description=desc_str, 
+                                     epilog=epilog_str,
+                                     formatter_class=wider_formatter)
+
+    # The '-h, --help' options are automatically added. The 'version' action on the '--version'
+    # option is special and will exit after printing the version string.
+    parser.add_argument('--steps',
+                        nargs='+',
+                        default=['all'],
+                        type=str.lower,
+                        choices=ALL_BUILD_STEPS + ['all'],
+                        metavar=('STEP', 'STEPS'),
+                        help='select the build steps this script should perform')
+    parser.add_argument('--packs-dir',
+                        default='show dialog',
+                        metavar='DIR',
+                        help='set location of packs directory to be read')
+    parser.add_argument('--llvm-build-type',
+                        default='Release',
+                        choices=['Release', 'Debug', 'RelWithDebInfo', 'MinSizeRel'],
+                        metavar='TYPE',
+                        help='select CMake build type to use for LLVM (does not apply to libraries)')
+    parser.add_argument('--llvm-branch',
+                        default=LLVM_REPO_BRANCH,
+                        metavar='REF',
+                        help='select LLVM git branch to clone from (use "main" to get latest)')
+    parser.add_argument('--cmsis-branch',
+                        default=CMSIS_REPO_BRANCH,
+                        metavar='REF',
+                        help='select CMSIS git branch to clone from (use "main" to get latest)')
+    parser.add_argument('--clone-all',
+                        action='store_true',
+                        help='clone every git repo even if not needed')
+    parser.add_argument('--full-clone',
+                        action='store_true',
+                        help='clone the fully history of git repos')
+    parser.add_argument('--enable-lto',
+                        action='store_true',
+                        help='enable Link Time Optimization for LLVM')
+    parser.add_argument('--single-stage',
+                        action='store_true',
+                        help='do a single-stage LLVM build instead of two-stage')
+    parser.add_argument('--version', action='version',
+                        version=version_str)
+
+    # The command-line arguments added above will be a part of the returned object as member
+    # variables. For example, 'args.output_dir' holds the argument for '--output_dir'.
+    return parser.parse_args()
+
+
+def test_args(args: argparse.Namespace) -> None:
+    '''Remove me later!
+    '''
+    print(f'Here are the steps you selected: {args.steps}')
+    print(f'Build type {args.llvm_build_type} selected')
+    print(f'LLVM branch is {args.llvm_branch}')
+    print(f'CMSIS branch is {args.cmsis_branch}')
+    print(f'The packs directory is {args.packs_dir}')
+
+    if os.path.exists(args.packs_dir):
+        print('Packs dir found')
+    else:
+        print('Packs dir not found')
+
+    if args.single_stage:
+        print('Single stage build selected')
+    else:
+        print('Will do two-stage build')
+
+    if args.enable_lto:
+        print('LTO enabled')
+    else:
+        print('LTO disabled')
+
+    if args.full_clone:
+        print('Doing a full clone of the git repos.')
+    else:
+        print('Doing a shallow clone of the git repos.')
+    
+    if args.clone_all:
+        print('Cloning all repos even if that step is not selected.')
+    else:
+        print('Cloning only needed repos.')
+
+    if args.clone_all  or  'llvm' in args.steps  or  'runtimes' in args.steps:
+        print('Clone from llvm repo')
+
+    if args.clone_all or 'musl' in args.steps:
+        print('Clone from musl repo')
+
+    if args.clone_all or 'devfiles' in args.steps:
+        print('Clone from pic32-device-file-maker repo')
+
+    if args.clone_all or 'cmsis' in args.steps:
+        print('Clone from cmsis repo')
 
 
 # TODO: list for being always ready to try out a full build.
 #
 # --Call that script from here and then copy results to install dir.
 # --Download CMSIS and put that into the correct spot. I might just need the header files.
-# --Add CLI arguments to this script to select steps instead of updating this script manually.
 # --Try running this on Windows. This might require using a thread to read from the subprocess.
 #
 
 # This is true when this file is executed as a script rather than imported into another file. We
 # probably don't need this, but there's no harm in checking.
 if '__main__' == __name__:
-    # Windows 10 has supported ANSI escape codes for a while, but it has to be enabled and Python on
-    # Windows (checked with 3.8) does not do that. This odd workaround came from
+    # The Windows Terminal (the one with tabs) supports ANSI escape codes, but the old console
+    # (conhost.exe) does not unless the following weird workaround is done. This came from
     # https://bugs.python.org/issue30075.
     if is_windows():
         subprocess.call('', shell=True)
 
-    # clone_from_git(LLVM_REPO_URL, LLVM_RELEASE_BRANCH, LLVM_SRC_DIR, skip_if_exists=True)
-    # clone_from_git(MUSL_REPO_URL, MUSL_RELEASE_BRANCH, MUSL_SRC_DIR, skip_if_exists=True)
+    args = get_command_line_arguments()
 
-    # if SINGLE_STAGE_LLVM:
-    #     build_single_stage_llvm()
-    # else:
-    #     build_two_stage_llvm()
+# TODO: This stuff could either be its own function or moved into get_command_line_arguments()
+    if 'all' in args.steps:
+        args.steps = ALL_BUILD_STEPS
 
-    build_variants = pic32_target_variants.create_build_variants()
-    if True:
-       for variant in build_variants:
-           build_musl(variant)
-           build_llvm_runtimes(variant)
+    if 'show dialog' == args.packs_dir:
+        selected_dir = get_dir_from_dialog('Select packs directory', mustexist=True)
+
+        if not selected_dir:
+            print('Packs directory dialog was cancelled; exiting.')
+            exit(0)
+        else:
+            args.packs_dir = Path(selected_dir)
     else:
-       build_musl(build_variants[0])
-       build_llvm_runtimes(build_variants[0])
+        args.packs_dir = Path(args.packs_dir)
+
+    if 'devfiles' in args.steps  and  not args.packs_dir.exists():
+        print('You need to specify an existing packs directory when the "devfiles" step is active')
+        print(f'The directory specified was {args.packs_dir.as_posix()}')
+        exit(0)
+
+    test_args(args)
+    exit(0)
+
+
+# TODO: Use args to determine which of these steps to do.
+    clone_selected_repos_from_git(args)
+
+    if args.single_stage:
+        build_single_stage_llvm()
+    else:
+        build_two_stage_llvm()
+
+    build_variants: list[TargetVariant] = pic32_target_variants.create_build_variants()
+    for variant in build_variants:
+        build_musl(variant)
+
+    for variant in build_variants:
+        build_llvm_runtimes(variant)
 
     # Do this extra print because otherwise the info string will be below where the command prompt
     # re-appears after this ends.

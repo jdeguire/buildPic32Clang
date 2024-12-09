@@ -16,22 +16,18 @@ set(LLVM_ENABLE_RUNTIMES "" CACHE STRING "")
 
 set(LLVM_TARGETS_TO_BUILD ARM;Mips CACHE STRING "")
 
-# Set BOOTSTRAP_CMAKE_BUILD_TYPE on the command line to pick which of these flags to use.
-set(CMAKE_C_FLAGS_RELWITHDEBINFO "-O3 -gline-tables-only -DNDEBUG" CACHE STRING "")
-set(CMAKE_CXX_FLAGS_RELWITHDEBINFO "-O3 -gline-tables-only -DNDEBUG" CACHE STRING "")
-set(CMAKE_C_FLAGS_DEBUG "-O1 -g" CACHE STRING "")
-set(CMAKE_CXX_FLAGS_DEBUG "-O1 -g" CACHE STRING "")
-
 # Add targets to build documentation using the Sphinx document generator. These
 # will not automatically build the docs; set LLVM_BUILD_DOCS to ON for that.
-set(LLVM_INCLUDE_DOCS ON CACHE BOOL "")
-set(LLVM_ENABLE_SPHINX ON CACHE BOOL "")
-set(SPHINX_WARNINGS_AS_ERRORS OFF CACHE BOOL "")
-set(SPHINX_OUTPUT_HTML ON CACHE BOOL "")
-set(SPHINX_OUTPUT_MAN ON CACHE BOOL "")
+# TODO: revisit this later.
+# set(LLVM_INCLUDE_DOCS ON CACHE BOOL "")
+# set(LLVM_ENABLE_SPHINX ON CACHE BOOL "")
+# set(SPHINX_WARNINGS_AS_ERRORS OFF CACHE BOOL "")
+# set(SPHINX_OUTPUT_HTML ON CACHE BOOL "")
+# set(SPHINX_OUTPUT_MAN ON CACHE BOOL "")
 
 # Use libc++ and lld when building this stage 2 toolchain. These might already
 # be set for bootstrap builds, but might as well be sure.
+# TODO: Why was this commented out? I don't remember.
 #set(LLVM_ENABLE_LLD ON CACHE BOOL "")
 #set(LLVM_ENABLE_LIBCXX ON CACHE BOOL "")
 #set(LLVM_BUILD_STATIC ON CACHE BOOL "")
