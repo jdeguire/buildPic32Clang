@@ -81,6 +81,9 @@ Here are the command-line arguments you can supply to control how the script run
     Clone the full histories of the git repos accessed by this script. This can be useful for
     development or if you want to archive the fully history of repositories. The default is to do
     only shallow clones such that no prior history is cloned.
+- `--skip-existing`  
+    Set this to skip clones of repos that already exist in the working area instead of raising an
+    exception.
 - `--enable-lto`  
     Enable Link Time Optimization when building LLVM. The default is to have LTO disabled.
 - `--single-stage`  
@@ -93,9 +96,10 @@ Here are the command-line arguments you can supply to control how the script run
     creating the device files. The default is 0, which will use one process per CPU. One per CPU is
     also the maximum allowed.
 - `--link-jobs`  
-    Set the number of parallel link processes to run when building any of the tools. LLVM docs
-    recommend one process per 15GB of memory available. The default is 0, which will use one
-    process per CPU. One per CPU is also the maximum allowed.
+    Set the number of parallel link processes to run when building the LLVM tools. LLVM docs
+    recommend one process per 15GB of memory available. Musl uses 'compile-jobs' for building and
+    linking because its Makefile does not provide a way to separate those. The default is 0, which
+    will use one process per CPU. One per CPU is also the maximum allowed.
 - `--version`  
     Print the script's version info and then exit.
 
