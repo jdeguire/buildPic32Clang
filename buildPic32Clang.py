@@ -169,7 +169,7 @@ def remake_dirs(dir: Path) -> None:
     
     Use this to remove build directories so that a clean build is done.
     '''
-    if dir.exists:
+    if dir.exists():
         shutil.rmtree(dir)
 
     os.makedirs(dir)
