@@ -9,7 +9,7 @@ I don't know enough about the Cortex-A parts to set them up properly.
 ## Requirements
 Here's a quick list of what you need.
 
-- Python 3.10 or newer
+- Python 3.12 or newer
 - A recent C++ compiler (MSVC, Clang, and GCC should all work)
 - CMake
 - GNU Make

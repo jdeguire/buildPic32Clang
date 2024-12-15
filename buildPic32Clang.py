@@ -112,8 +112,9 @@ def get_dir_from_dialog(title: str | None = None, mustexist: bool = True) -> str
 
 
 def is_windows() -> bool:
-    '''Return True if this script is running in a Windows environment. This returns False when run
-    in a shell for the Windows Subsystem for Linux (WSL).
+    '''Return True if this script is running in a Windows environment.
+    
+    This returns False when run in a shell for the Windows Subsystem for Linux (WSL).
     '''
     return 'nt' == os.name
 
@@ -125,7 +126,8 @@ def get_cmake_bool(sel: bool) -> str:
 
 
 def get_lib_build_dir(libname: str, variant: TargetVariant) -> Path:
-    '''Get a path relative to this script at which a library build will be performed.
+    '''Get a path relative to the working directory from which this script was run at which a
+    library build will be performed.
 
     The path created depends on the path value in the given variant so that each variant has its own
     build directory.
@@ -134,8 +136,8 @@ def get_lib_build_dir(libname: str, variant: TargetVariant) -> Path:
 
 
 def get_lib_install_prefix(variant: TargetVariant) -> Path:
-    '''Get a path relative to this script that would be used as the "prefix" path for installing the
-    libraries.
+    '''Get a path relative to the working directory from which this script was run that would be
+    used as the "prefix" path for installing the libraries.
     '''
     return INSTALL_PREFIX / variant.arch
 
@@ -145,20 +147,21 @@ def get_lib_info_str(variant: TargetVariant) -> str:
     return str(variant.arch / variant.path)
 
 
-# TODO: All uses of this convert the return value to an absolute path, so maybe this should just return an absolute path.
-def get_lib_build_tool_path(args: argparse.Namespace) -> Path:
-    '''Get the path relative to this script at which a built LLVM/Clang toolchain suitable for
-    building the libraries in this script is located.
-    
+def get_lib_build_tool_abspath(args: argparse.Namespace) -> Path:
+    '''Get the absolute path to the just-built LLVM/Clang toolchain so it can be used to build
+    the libraries.
+
     This returns the top-level directory for the toolchain--that is, the path at which the bin/,
     lib/, and so on directories are located. This will use the stage 2 build location if able because
     the LLVM libraries make use of CMake caches and other build items in that location rather than 
     the final install location.
     '''
     if args.single_stage:
-        return BUILD_PREFIX / 'llvm'
+        libpath = BUILD_PREFIX / 'llvm'
     else:
-        return BUILD_PREFIX / 'llvm' / 'tools' / 'clang' / 'stage2-bins'
+        libpath = BUILD_PREFIX / 'llvm' / 'tools' / 'clang' / 'stage2-bins'
+
+    return libpath.absolute()
 
 
 def remake_dirs(dir: Path) -> None:
@@ -166,7 +169,7 @@ def remake_dirs(dir: Path) -> None:
     
     Use this to remove build directories so that a clean build is done.
     '''
-    if os.path.exists(dir):
+    if dir.exists:
         shutil.rmtree(dir)
 
     os.makedirs(dir)
@@ -217,6 +220,12 @@ def run_subprocess(cmd_args: list[str], info_str: str, working_dir: Path = None,
     command were typed into the terminal. See the Python documentation for subprocess.Popen() for
     more info.
     '''
+    # print('Called run_subprocess with the following:')
+    # print(f'{cmd_args=}')
+    # print(f'{working_dir=}')
+    # print('----------\n')
+    # return
+
     if info_str:
         print_line_with_info_str('', info_str)
 
@@ -264,8 +273,7 @@ def run_subprocess(cmd_args: list[str], info_str: str, working_dir: Path = None,
         raise subprocess.CalledProcessError(proc.returncode, cmd_args, except_output)
 
 
-# TODO: Can dest_directory be a Path?
-def clone_from_git(url: str, branch: str = None, dest_directory: str = None,
+def clone_from_git(url: str, branch: str = None, dest_directory: Path = None,
                    skip_if_exists: bool = False, full_clone: bool = False) -> None:
     '''Clone a git repo from the given url.
 
@@ -294,7 +302,7 @@ def clone_from_git(url: str, branch: str = None, dest_directory: str = None,
     cmd.append(url)
 
     if dest_directory:
-        cmd.append(dest_directory)
+        cmd.append(dest_directory.as_posix())
 
     try:
         run_subprocess(cmd, 'Cloning ' + url)
@@ -332,15 +340,14 @@ def build_single_stage_llvm(args: argparse.Namespace) -> None:
     avoid this, enter the directory using a command line and manually start a build from there.
     '''
     build_dir = BUILD_PREFIX / 'llvm'
-# TODO: Pathlib might have relpath stuff now.
-    install_dir = os.path.relpath(INSTALL_PREFIX, build_dir)
-    src_dir = os.path.relpath(LLVM_SRC_DIR / 'llvm', build_dir)
+    install_dir = Path(os.path.relpath(INSTALL_PREFIX, build_dir))
+    src_dir = Path(os.path.relpath(LLVM_SRC_DIR / 'llvm', build_dir))
 
     remake_dirs(build_dir)
 
     gen_cmd = [
         'cmake', '-G', 'Ninja',
-        f'-DCMAKE_INSTALL_PREFIX={install_dir}',
+        f'-DCMAKE_INSTALL_PREFIX={install_dir.as_posix()}',
         f'-DCMAKE_BUILD_TYPE={args.llvm_build_type}',
         f'-DLLVM_ENABLE_LTO={get_cmake_bool(args.enable_lto)}',
         f'-DLLVM_PARALLEL_COMPILE_JOBS={args.compile_jobs}',
@@ -349,7 +356,7 @@ def build_single_stage_llvm(args: argparse.Namespace) -> None:
         '-DLLVM_USE_SPLIT_DWARF=ON',
         '-DLLVM_TARGETS_TO_BUILD=ARM;Mips',
         '-DLLVM_ENABLE_PROJECTS=clang;clang-tools-extra;lld;lldb;polly',
-        src_dir
+        src_dir.as_posix()
     ]
     run_subprocess(gen_cmd, 'Generate LLVM build script', build_dir)
 
@@ -367,10 +374,10 @@ def build_two_stage_llvm(args: argparse.Namespace) -> None:
     avoid this, enter the directory using a command line and manually start a build from there.
     '''
     build_dir = BUILD_PREFIX / 'llvm'
-    install_dir = os.path.relpath(INSTALL_PREFIX, build_dir)
-    src_dir = os.path.relpath(LLVM_SRC_DIR / 'llvm', build_dir)
-    cmake_config_path = os.path.relpath(CMAKE_CACHE_DIR / 'pic32clang-llvm-stage1.cmake',
-                                             build_dir)
+    install_dir = Path(os.path.relpath(INSTALL_PREFIX, build_dir))
+    src_dir = Path(os.path.relpath(LLVM_SRC_DIR / 'llvm', build_dir))
+    cmake_config_path = Path(os.path.relpath(CMAKE_CACHE_DIR / 'pic32clang-llvm-stage1.cmake',
+                                             build_dir))
 
     remake_dirs(build_dir)
 
@@ -385,15 +392,15 @@ def build_two_stage_llvm(args: argparse.Namespace) -> None:
     #       since anything starting with BOOTSTRAP_ is passed to the stage2 build automatically.
     gen_cmd = [
         'cmake', '-G', 'Ninja',
-        f'-DCMAKE_INSTALL_PREFIX={install_dir}',
+        f'-DCMAKE_INSTALL_PREFIX={install_dir.as_posix()}',
         f'-DBOOTSTRAP_LLVM_ENABLE_LTO={get_cmake_bool(args.enable_lto)}',
         f'-DBOOTSTRAP_CMAKE_BUILD_TYPE={args.llvm_build_type}',
         f'-DLLVM_PARALLEL_COMPILE_JOBS={args.compile_jobs}',
         f'-DLLVM_PARALLEL_LINK_JOBS={args.link_jobs}',
         f'-DBOOTSTRAP_LLVM_PARALLEL_COMPILE_JOBS={args.compile_jobs}',
         f'-DBOOTSTRAP_LLVM_PARALLEL_LINK_JOBS={args.link_jobs}',
-        '-C', cmake_config_path,
-        src_dir
+        '-C', cmake_config_path.as_posix(),
+        src_dir.as_posix()
     ]
     run_subprocess(gen_cmd, 'Generate LLVM build script', build_dir)
 
@@ -415,16 +422,11 @@ def build_musl(args: argparse.Namespace, variant: TargetVariant):
     '''
     build_dir = get_lib_build_dir('musl', variant)
     prefix = get_lib_install_prefix(variant)
-# TODO: Pathlib might have relpath stuff now.
-    prefix_dir = os.path.relpath(prefix, build_dir)
-    lib_dir = os.path.relpath(prefix / 'lib' / variant.path, build_dir)
-    src_dir = os.path.relpath(MUSL_SRC_DIR, build_dir)
+    prefix_dir = Path(os.path.relpath(prefix, build_dir))
+    lib_dir = Path(os.path.relpath(prefix / 'lib' / variant.path, build_dir))
+    src_dir = Path(os.path.relpath(MUSL_SRC_DIR, build_dir))
 
     remake_dirs(build_dir)
-
-    num_cpus = os.cpu_count()
-    if None == num_cpus or num_cpus < 1:
-        num_cpus = 1
 
     #####
     # Notes:
@@ -438,20 +440,19 @@ def build_musl(args: argparse.Namespace, variant: TargetVariant):
     # --For Armv7(E)-M and Armv8M/8.1M Mainline, Clang defines both __thumb__ and __thumb2__.
     # --For Armv6-M and Armv8-M.base, only __thumb__ is defined.
 
-    build_tool_path = get_lib_build_tool_path(args)
+    build_tool_path = get_lib_build_tool_abspath(args)
 
     build_env = os.environ.copy()
-# TODO: Pathlib might have abspath stuff now.
-    build_env['AR'] = os.path.abspath(build_tool_path / 'bin' / 'llvm-ar')
-    build_env['RANLIB'] = os.path.abspath(build_tool_path / 'bin' / 'llvm-ranlib')
-    build_env['CC'] = os.path.abspath(build_tool_path / 'bin' / 'clang')
+    build_env['AR'] = str(build_tool_path / 'bin' / 'llvm-ar')
+    build_env['RANLIB'] = str(build_tool_path / 'bin' / 'llvm-ranlib')
+    build_env['CC'] = str(build_tool_path / 'bin' / 'clang')
     build_env['CFLAGS'] = ' '.join(variant.options) + ' -gline-tables-only'
 
 # TODO: Does this need to specify a custom version string since this is my branch of Musl?
     gen_cmd = [
-        f'{src_dir}/configure', 
-        f'--prefix={prefix_dir}',
-        f'--libdir={lib_dir}',
+        f'{src_dir.as_posix()}/configure', 
+        f'--prefix={prefix_dir.as_posix()}',
+        f'--libdir={lib_dir.as_posix()}',
         '--disable-shared',
         '--disable-wrapper',
         '--disable-optimize',
@@ -465,7 +466,7 @@ def build_musl(args: argparse.Namespace, variant: TargetVariant):
     clean_info = f'Clean Musl ({get_lib_info_str(variant)})'
     run_subprocess(clean_cmd, clean_info, build_dir, penv=build_env)
 
-    build_cmd = ['make', f'-j{args.compile_jobs})']
+    build_cmd = ['make', '--output-sync=target', f'-j{args.compile_jobs})']
     build_info = f'Build Musl ({get_lib_info_str(variant)})'
     run_subprocess(build_cmd, build_info, build_dir, penv=build_env)
 
@@ -483,13 +484,12 @@ def build_llvm_runtimes(args: argparse.Namespace, variant: TargetVariant):
     '''
     build_dir = get_lib_build_dir('runtimes', variant)
     prefix = get_lib_install_prefix(variant)
-# TODO: Pathlib might have relpath and abspath stuff now.
-    prefix_dir = os.path.relpath(prefix, build_dir)
-    src_dir = os.path.relpath(LLVM_SRC_DIR / 'runtimes', build_dir)
+    prefix_dir = Path(os.path.relpath(prefix, build_dir))
+    src_dir = Path(os.path.relpath(LLVM_SRC_DIR / 'runtimes', build_dir))
 
-    clang_sysroot = os.path.abspath(get_lib_build_tool_path(args))
-    cmake_config_path = os.path.relpath(CMAKE_CACHE_DIR / 'pic32clang-target-runtimes.cmake',
-                                             build_dir)
+    clang_sysroot = get_lib_build_tool_abspath(args)
+    cmake_config_path = Path(os.path.relpath(CMAKE_CACHE_DIR / 'pic32clang-target-runtimes.cmake',
+                                             build_dir))
 
     remake_dirs(build_dir)
 
@@ -503,19 +503,18 @@ def build_llvm_runtimes(args: argparse.Namespace, variant: TargetVariant):
     # TODO: The CMake script for the runtimes excludes the built-in atomics support because it fails
     #       with Armv6-m. It does not support the Arm atomic access instructions. Could we enable
     #       the atomics support for all other archs and leave out v6m?
-    # TODO: Enable LTO and figure out if LTO libraries can be used in non-LTO builds.
     options_str = ';'.join(variant.options)
     gen_cmd = [
         'cmake', '-G', 'Ninja', 
-        f'-DCMAKE_INSTALL_PREFIX={prefix_dir}',
+        f'-DCMAKE_INSTALL_PREFIX={prefix_dir.as_posix()}',
         f'-DPIC32CLANG_LIBDIR_SUFFIX={variant.path.as_posix()}',
         f'-DPIC32CLANG_TARGET_TRIPLE={triple_str}',
         f'-DPIC32CLANG_RUNTIME_FLAGS={options_str}',
-        f'-DPIC32CLANG_SYSROOT={clang_sysroot}',
+        f'-DPIC32CLANG_SYSROOT={clang_sysroot.as_posix()}',
         f'-DLLVM_PARALLEL_COMPILE_JOBS={args.compile_jobs}',
         f'-DLLVM_PARALLEL_LINK_JOBS={args.link_jobs}',
-        '-C', cmake_config_path,
-        src_dir
+        '-C', cmake_config_path.as_posix(),
+        src_dir.as_posix()
     ]
     gen_build_info = f'Generate runtimes build script ({get_lib_info_str(variant)})'
     run_subprocess(gen_cmd, gen_build_info, build_dir)
@@ -533,14 +532,14 @@ def build_device_files(args: argparse.Namespace) -> None:
     '''Build the device-specific files like headers file and linker scripts.
     '''
     build_dir = BUILD_PREFIX / 'pic32-device-file-maker'
-    output_dir = os.path.relpath(build_dir, PIC32_FILE_MAKER_SRC_DIR)
+    output_dir = Path(os.path.relpath(build_dir, PIC32_FILE_MAKER_SRC_DIR))
 
     # Run the maker app.
     #
     build_cmd = [
         'python3', './pic32-device-file-maker.py',
         '--parse-jobs', str(args.compile_jobs),
-        '--output-dir', output_dir,
+        '--output-dir', output_dir.as_posix(),
         args.packs_dir.as_posix()
     ]
     run_subprocess(build_cmd, 'Make device-specifc files', PIC32_FILE_MAKER_SRC_DIR)
@@ -745,12 +744,6 @@ def print_arg_info(args: argparse.Namespace) -> None:
 
     print('----------')
 
-# TODO: list for being always ready to try out a full build.
-#
-# --Call that script from here and then copy results to install dir.
-# --Download CMSIS and put that into the correct spot. I might just need the header files.
-# --Try running this on Windows. This might require using a thread to read from the subprocess.
-#
 
 # This is true when this file is executed as a script rather than imported into another file. We
 # probably don't need this, but there's no harm in checking.
@@ -779,11 +772,11 @@ if '__main__' == __name__:
 
     if 'musl' in args.steps:
         for variant in build_variants:
-            build_musl(variant)
+            build_musl(args, variant)
 
     if 'runtimes' in args.steps:
         for variant in build_variants:
-            build_llvm_runtimes(variant)
+            build_llvm_runtimes(args, variant)
 
     if 'devfiles' in args.steps:
         build_device_files(args)
