@@ -583,6 +583,16 @@ def get_command_line_arguments() -> argparse.Namespace:
     parser.add_argument('--single-stage',
                         action='store_true',
                         help='do a single-stage LLVM build instead of two-stage')
+    parser.add_argument('--compile-jobs',
+                        type=int,
+                        default=0,
+                        metavar='JOBS',
+                        help='number of parallel compile jobs')
+    parser.add_argument('--link-jobs',
+                        type=int,
+                        default=0,
+                        metavar='JOBS',
+                        help='number of parallel link jobs')
     parser.add_argument('--version', action='version',
                         version=version_str)
 

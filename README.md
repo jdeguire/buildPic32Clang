@@ -88,6 +88,14 @@ Here are the command-line arguments you can supply to control how the script run
     useful for development. A two-stage build is normally recommended so that the distributed
     toolchain is always built with the latest tools. This can also help ensure the same behavior
     across platforms if you plan on distributing a toolchain on, say, Linux and Windows.
+- `--compile-jobs`  
+    Set the number of parallel compile processes to run when building any of the tools and when
+    creating the device files. The default is 0, which will use one process per CPU. One per CPU is
+    also the maximum allowed.
+- `--link-jobs`  
+    Set the number of parallel link processes to run when building any of the tools. LLVM docs
+    recommend one process per 15GB of memory available. The default is 0, which will use one
+    process per CPU. One per CPU is also the maximum allowed.
 - `--version`  
     Print the script's version info and then exit.
 
