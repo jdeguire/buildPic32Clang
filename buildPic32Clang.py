@@ -466,7 +466,7 @@ def build_musl(args: argparse.Namespace, variant: TargetVariant):
     clean_info = f'Clean Musl ({get_lib_info_str(variant)})'
     run_subprocess(clean_cmd, clean_info, build_dir, penv=build_env)
 
-    build_cmd = ['make', '--output-sync=target', f'-j{args.compile_jobs})']
+    build_cmd = ['make', '--output-sync=target', f'-j{args.compile_jobs}']
     build_info = f'Build Musl ({get_lib_info_str(variant)})'
     run_subprocess(build_cmd, build_info, build_dir, penv=build_env)
 
