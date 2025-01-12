@@ -103,16 +103,22 @@ set(CMAKE_CXX_COMPILER_TARGET ${PIC32CLANG_TARGET_TRIPLE} CACHE STRING "")
 set(CMAKE_ASM_COMPILER_TARGET ${PIC32CLANG_TARGET_TRIPLE} CACHE STRING "")
 # This needs to be "Linux" because otherwise a CMake check will fail claiming
 # it cannot determine the target platform. 
+# TODO: Should this be "Generic" instead? That's what the example CMake cache
+#       at /llvm/clang/cmake/caches/BaremetalARM.cmake does.
 set(CMAKE_SYSTEM_NAME Linux CACHE STRING "")
 set(CMAKE_TRY_COMPILE_TARGET_TYPE STATIC_LIBRARY CACHE STRING "")
+
+# TODO: Have a look at pic32clang/llvm/libcxx/cmake/caches/Armv7M-picolibc.cmake
+#       to see what other options we should add here.
 
 set(LLVM_INCLUDE_DOCS ON CACHE BOOL "")
 set(LLVM_ENABLE_SPHINX ON CACHE BOOL "")
 set(LLVM_COMPILER_CHECKED ON CACHE BOOL "")
+set(LLVM_ENABLE_PER_TARGET_RUNTIME_DIR OFF CACHE BOOL "")
 set(LLVM_ENABLE_RUNTIMES "compiler-rt;libcxx;libcxxabi;libunwind" CACHE STRING "")
 set(LLVM_LIBDIR_SUFFIX "/${PIC32CLANG_LIBDIR_SUFFIX}" CACHE STRING "")
 
-set(COMPILER_RT_OS_DIR "${PIC32CLANG_LIBDIR_SUFFIX}/baremetal" CACHE STRING "")
+set(COMPILER_RT_OS_DIR "${PIC32CLANG_LIBDIR_SUFFIX}/" CACHE STRING "")
 set(COMPILER_RT_BAREMETAL_BUILD ON CACHE BOOL "")
 set(COMPILER_RT_DEFAULT_TARGET_ONLY ON CACHE BOOL "")
 set(COMPILER_RT_BUILD_BUILTINS ON CACHE BOOL "")
@@ -151,16 +157,25 @@ set(LIBCXX_ENABLE_EXPERIMENTAL_LIBRARY ON CACHE BOOL "")
 set(LIBCXX_CXX_ABI libcxxabi CACHE STRING "")
 set(LIBCXX_USE_COMPILER_RT ON CACHE BOOL "")
 set(LIBCXX_USE_LLVM_UNWINDER ON CACHE BOOL "")
-set(LIBCXX_HAS_PTHREAD_API ON CACHE BOOL "")
+# set(LIBCXX_HAS_PTHREAD_API ON CACHE BOOL "")
 set(LIBCXX_ENABLE_TIME_ZONE_DATABASE OFF CACHE BOOL "")
+
+# Disable these for now because of an undefined symbol error for TIME_MONOTONIC
+# Threads must be disabled to disable the monotonic clock.
+set(LIBCXX_ENABLE_MONOTONIC_CLOCK OFF CACHE BOOL "")
+set(LIBCXX_ENABLE_THREADS OFF CACHE BOOL "")
+set(LIBCXX_HAS_PTHREAD_API OFF CACHE BOOL "")
 
 set(LIBCXXABI_BAREMETAL ON CACHE BOOL "")
 set(LIBCXXABI_ENABLE_STATIC ON CACHE BOOL "")
 set(LIBCXXABI_ENABLE_SHARED OFF CACHE BOOL "")
 set(LIBCXXABI_USE_LLVM_UNWINDER ON CACHE BOOL "")
 set(LIBCXXABI_USE_COMPILER_RT ON CACHE BOOL "")
-set(LIBCXXABI_HAS_PTHREAD_API ON CACHE BOOL "")
+# set(LIBCXXABI_HAS_PTHREAD_API ON CACHE BOOL "")
 
+# Disable these for now to match libcxx a few lines above.
+set(LIBCXXABI_HAS_PTHREAD_API OFF CACHE BOOL "")
+set(LIBCXXABI_ENABLE_THREADS OFF CACHE BOOL "")
 
 # This prints out variables and was found on Stack Overflow.
 #get_cmake_property(_variableNames VARIABLES)

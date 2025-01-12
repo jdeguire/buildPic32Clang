@@ -352,6 +352,7 @@ def build_single_stage_llvm(args: argparse.Namespace) -> None:
         f'-DLLVM_ENABLE_LTO={get_cmake_bool(args.enable_lto)}',
         f'-DLLVM_PARALLEL_COMPILE_JOBS={args.compile_jobs}',
         f'-DLLVM_PARALLEL_LINK_JOBS={args.link_jobs}',
+        '-DCLANG_CONFIG_FILE_SYSTEM_DIR=../config',
         '-DLLVM_OPTIMIZED_TABLEGEN=ON',
         '-DLLVM_USE_SPLIT_DWARF=ON',
         '-DLLVM_TARGETS_TO_BUILD=ARM;Mips',
@@ -423,7 +424,7 @@ def build_musl(args: argparse.Namespace, variant: TargetVariant):
     build_dir = get_lib_build_dir('musl', variant)
     prefix = get_lib_install_prefix(variant)
     prefix_dir = Path(os.path.relpath(prefix, build_dir))
-    lib_dir = Path(os.path.relpath(prefix / 'lib' / variant.path, build_dir))
+    lib_dir = Path(os.path.relpath(prefix / variant.path / 'lib', build_dir))
     src_dir = Path(os.path.relpath(MUSL_SRC_DIR, build_dir))
 
     remake_dirs(build_dir)
@@ -507,7 +508,8 @@ def build_llvm_runtimes(args: argparse.Namespace, variant: TargetVariant):
     gen_cmd = [
         'cmake', '-G', 'Ninja', 
         f'-DCMAKE_INSTALL_PREFIX={prefix_dir.as_posix()}',
-        f'-DPIC32CLANG_LIBDIR_SUFFIX={variant.path.as_posix()}',
+        # This suffix goes up a level because the LLVM CMake scripts add an extra '/lib/' we don't want.
+        f'-DPIC32CLANG_LIBDIR_SUFFIX=../{variant.path.as_posix()}/lib',
         f'-DPIC32CLANG_TARGET_TRIPLE={triple_str}',
         f'-DPIC32CLANG_RUNTIME_FLAGS={options_str}',
         f'-DPIC32CLANG_SYSROOT={clang_sysroot.as_posix()}',
@@ -526,6 +528,19 @@ def build_llvm_runtimes(args: argparse.Namespace, variant: TargetVariant):
     install_cmd = ['cmake', '--build', '.', '--target', 'install']
     install_info = f'Install runtimes ({get_lib_info_str(variant)})'
     run_subprocess(install_cmd, install_info, build_dir)
+
+    # Compiler-RT is built to include the arch name in the library name unless we let CMake decide
+    # the directories to install them (option LLVM_ENABLE_PER_TARGET_RUNTIME_DIR). That ends up
+    # being a pain for other reasons, but we need to remove the arch from the library name to help
+    # Clang find Compiler-RT in our arch-specific directory structure.
+    compiler_rt_path = prefix / variant.path / 'lib'
+    for crt in compiler_rt_path.iterdir():
+        if crt.name.startswith('libclang_rt.'):
+            subname = crt.stem[12:].split('-', 1)
+            crt.rename(crt.parent / f'libclang_rt.{subname[0]}{crt.suffix}')
+        elif crt.name.startswith('clang_rt.'):
+            subname = crt.stem[9:].split('-', 1)
+            crt.rename(crt.parent / f'clang_rt.{subname[0]}{crt.suffix}')
 
 
 def build_device_files(args: argparse.Namespace) -> None:
@@ -551,6 +566,9 @@ def build_device_files(args: argparse.Namespace) -> None:
                     INSTALL_PREFIX,
                     dirs_exist_ok=True)
     print('Done!')
+
+#TODO: We need to build the startup code and vectors into crt0.o and put that into the 
+#      device-specific library directory.
 
 
 def copy_cmsis_files() -> None:

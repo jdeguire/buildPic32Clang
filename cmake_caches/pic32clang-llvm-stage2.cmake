@@ -55,6 +55,11 @@ set(CLANG_DEFAULT_RTLIB "compiler-rt" CACHE STRING "")
 set(CLANG_DEFAULT_UNWINDLIB "libunwind" CACHE STRING "")
 set(CLANG_DEFAULT_OBJCOPY "llvm-objcopy" CACHE STRING "")
 
+# Tell Clang to look in ../config relative to its executable for our device
+# configuration files. This can be overridden using the --config-system-dir=
+# option.
+set(CLANG_CONFIG_FILE_SYSTEM_DIR "../config" CACHE STRING "")
+
 # Setup toolchain
 # These are names of subdirectories under "llvm/llvm/tools".
 set(LLVM_INSTALL_TOOLCHAIN_ONLY ON CACHE BOOL "")
