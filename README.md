@@ -43,7 +43,7 @@ Here are the command-line arguments you can supply to control how the script run
 
 - `--help` or `-h`  
     Print a brief summary of these arguments and then exit.
-- `--steps {[clone, llvm, musl, runtimes, devfiles, cmsis, all]}`  
+- `--steps {[clone, llvm, musl, runtimes, devfiles, cmsis, startup, all]}`  
     Select what this script should build and if it should clone the git repo for the selected 
     componenets first. Any combination of options works as long as at least one is provided. Use
     "all" to clone and build everything, which is the default.
@@ -57,6 +57,8 @@ Here are the command-line arguments you can supply to control how the script run
     variants.
     - **devfiles**: Generate device-specific files like linker scripts, header files, and so on.
     - **cmsis**: Copy the Arm CMSIS files to their proper locations.
+    - **startup**: Build the startup code for the devices with this toolchain. The other steps must
+    either be specified as well or completed in a previous run.
     - **all**: Do all of the above. This is the default.
 - `--packs-dir DIR`  
     Indicate where the this script can find the Microchip packs used to provide information about

@@ -75,7 +75,7 @@ CMAKE_CACHE_DIR = Path(os.path.dirname(os.path.realpath(__file__)), 'cmake_cache
 
 # These are the build steps this script can do. The steps to be done can be given on the 
 # command line or 'all' can be used to do all of these.
-ALL_BUILD_STEPS = ['clone', 'llvm', 'musl', 'runtimes', 'devfiles', 'cmsis']
+ALL_BUILD_STEPS = ['clone', 'llvm', 'musl', 'runtimes', 'devfiles', 'cmsis', 'startup']
 
 
 LLVM_REPO_URL = 'https://github.com/llvm/llvm-project.git'
@@ -195,7 +195,8 @@ def print_line_with_info_str(line: str, info_str: str) -> None:
 
 
 def run_subprocess(cmd_args: list[str], info_str: str, working_dir: Path = None, 
-                   penv: dict[str, str] = None, use_shell: bool = False) -> None:
+                   penv: dict[str, str] = None, use_shell: bool = False,
+                   echo_cmd: bool = False) -> None:
     '''Run the given command while printing the given step string at the end of output.
 
     Run the command given by the list cmd_args in which the first item in the list is the name of
@@ -219,15 +220,17 @@ def run_subprocess(cmd_args: list[str], info_str: str, working_dir: Path = None,
     this is True, then 'cmd_args' should be a single string formatted just like it would be if the
     command were typed into the terminal. See the Python documentation for subprocess.Popen() for
     more info.
-    '''
-    # print('Called run_subprocess with the following:')
-    # print(f'{cmd_args=}')
-    # print(f'{working_dir=}')
-    # print('----------\n')
-    # return
 
+    The final argument indicates if the command should be printed into the output. If True, each
+    element in the command list will be separated by a single space.
+    '''
     if info_str:
-        print_line_with_info_str('', info_str)
+        if echo_cmd:
+            print_line_with_info_str(' '.join(cmd_args), info_str)
+        else:
+            print_line_with_info_str('', info_str)
+    elif echo_cmd:
+        print(' '.join(cmd_args))
 
     output = ''
     prev_output = ''
@@ -567,8 +570,45 @@ def build_device_files(args: argparse.Namespace) -> None:
                     dirs_exist_ok=True)
     print('Done!')
 
-#TODO: We need to build the startup code and vectors into crt0.o and put that into the 
-#      device-specific library directory.
+
+def build_device_startup_files() -> None:
+    '''Build the startup files for each device into crt0.o object files.
+
+    The device config files are set up such that the toolchain will look for crt0.o in the
+    device-specific directories, so this will put the object files there. This step requires that
+    all of the other steps have been completed (except for maybe the library and runtime builds).
+    This does not stop if a device build fails. A summary of failed devices is printed at the end
+    if there were any failed builds.
+    '''
+    crt0_dir: Path = INSTALL_PREFIX / 'cortex-m' / 'proc'
+    failed_devices: list[str] = []
+
+    for proc_dir in crt0_dir.iterdir():
+        if not proc_dir.is_dir():
+            continue
+
+        try:
+            build_cmd = [
+                str(Path('../../../bin/clang')),
+                '--config', f'{proc_dir.name}.cfg',
+                '-Os',
+                '-c',
+                '-o', 'crt0.0',
+                'startup.c'
+            ]
+            run_subprocess(build_cmd, 
+                        f'Build startup (crt0.o) for {proc_dir.name.upper()}',
+                        proc_dir,
+                        echo_cmd = True)
+        except subprocess.CalledProcessError as err:
+            devname = proc_dir.name.upper()
+            failed_devices.append(devname)
+            print(f'Building startup code for {devname} failed with:')
+            print('    ' + str(err))
+
+    if failed_devices:
+        print(f'----------\nStartup code for {len(failed_devices)} devices failed to build:')
+        print('\n'.join(failed_devices))
 
 
 def copy_cmsis_files() -> None:
@@ -801,6 +841,9 @@ if '__main__' == __name__:
 
     if 'cmsis' in args.steps:
         copy_cmsis_files()
+
+    if 'startup' in args.steps:
+        build_device_startup_files()
 
     # Do this extra print because otherwise the info string will be below where the command prompt
     # re-appears after this ends.

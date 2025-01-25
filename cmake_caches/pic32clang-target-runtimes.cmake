@@ -34,6 +34,7 @@ set(PIC32CLANG_RUNTIME_FLAGS "" CACHE STRING "Compiler flags for building the ru
 # location instead of the installed location. This is because the build location has extra
 # CMake files that are needed by the runtime build. Find it at 
 # "<build-prefix>/llvm/tools/clang/stage2-bins".
+# TODO: Maybe change this from SYSROOT to something else because sysroot might mean something else.
 set(PIC32CLANG_SYSROOT "" CACHE PATH "The root of the compiler that will build the runtimes")
 
 # Use this to add a suffix to the location at which the libraries will be installed. This is used by
@@ -104,7 +105,8 @@ set(CMAKE_ASM_COMPILER_TARGET ${PIC32CLANG_TARGET_TRIPLE} CACHE STRING "")
 # This needs to be "Linux" because otherwise a CMake check will fail claiming
 # it cannot determine the target platform. 
 # TODO: Should this be "Generic" instead? That's what the example CMake cache
-#       at /llvm/clang/cmake/caches/BaremetalARM.cmake does.
+#       at /llvm/clang/cmake/caches/BaremetalARM.cmake does. That is what the
+#       MPLAB Extensions for VS Code use, too. Does LLVM barf on "Generic"?
 set(CMAKE_SYSTEM_NAME Linux CACHE STRING "")
 set(CMAKE_TRY_COMPILE_TARGET_TYPE STATIC_LIBRARY CACHE STRING "")
 
