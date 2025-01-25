@@ -593,7 +593,7 @@ def build_device_startup_files() -> None:
                 '--config', f'{proc_dir.name}.cfg',
                 '-Os',
                 '-c',
-                '-o', 'crt0.0',
+                '-o', 'crt0.o',
                 'startup.c'
             ]
             run_subprocess(build_cmd, 
