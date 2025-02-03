@@ -558,7 +558,7 @@ def build_device_files(args: argparse.Namespace) -> None:
         'python3', './pic32-device-file-maker.py',
         '--parse-jobs', str(args.compile_jobs),
         '--output-dir', output_dir.as_posix(),
-        args.packs_dir.as_posix()
+        args.packs_dir.resolve().as_posix()
     ]
     run_subprocess(build_cmd, 'Make device-specifc files', PIC32_FILE_MAKER_SRC_DIR)
 
