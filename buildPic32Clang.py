@@ -47,8 +47,8 @@
 # least try it out to see what that looks like, even if you do not plan to use MPLAB X full-time.
 #
 # In addition to Clang itself, this will build libraries needed to support the devices, including
-# Musl libC, CMSIS for Arm devices, and support libraries for device-specific needs (such as startup
-# code).
+# the LLVM runtimes, CMSIS for Arm devices, and support libraries for device-specific needs (such
+# as startup code).
 #
 
 import argparse
@@ -62,6 +62,10 @@ import time
 import tkinter
 import tkinter.filedialog
 
+# These are the build steps this script can do. The steps to be done can be given on the 
+# command line or 'all' can be used to do all of these.
+ALL_BUILD_STEPS = ['clone', 'llvm', 'runtimes', 'devfiles', 'cmsis', 'startup']
+
 PIC32_CLANG_VERSION = '0.01'
 PIC32_CLANG_PROJECT_URL = 'https://github.com/jdeguire/buildPic32Clang'
 
@@ -72,23 +76,9 @@ INSTALL_PREFIX = ROOT_WORKING_DIR / 'install'
 
 CMAKE_CACHE_DIR = Path(os.path.dirname(os.path.realpath(__file__)), 'cmake_caches')
 
-
-# These are the build steps this script can do. The steps to be done can be given on the 
-# command line or 'all' can be used to do all of these.
-ALL_BUILD_STEPS = ['clone', 'llvm', 'musl', 'runtimes', 'devfiles', 'cmsis', 'startup']
-
-
 LLVM_REPO_URL = 'https://github.com/llvm/llvm-project.git'
 LLVM_REPO_BRANCH = 'llvmorg-19.1.5'
 LLVM_SRC_DIR = ROOT_WORKING_DIR / 'llvm'
-
-# Use my clone of Musl for now because it will contain mods to get it to work
-# on our PIC32 and SAM devices.
-#MUSL_REPO_URL = 'https://git.musl-libc.org/cgit/musl.git'
-#MUSL_RELEASE_BRANCH = ''
-MUSL_REPO_URL = 'https://github.com/jdeguire/musl.git'
-MUSL_REPO_BRANCH = 'arm_cortex_m'
-MUSL_SRC_DIR = ROOT_WORKING_DIR / 'musl'
 
 PIC32_FILE_MAKER_REPO_URL = 'https://github.com/jdeguire/pic32-device-file-maker.git'
 PIC32_FILE_MAKER_SRC_DIR = ROOT_WORKING_DIR / 'pic32-device-file-maker'
@@ -194,8 +184,8 @@ def print_line_with_info_str(line: str, info_str: str) -> None:
     print('\n\n\x1b[7m' + info_str + '\x1b[27m\x1b[K\r\x1b[A', end='', flush=True)
 
 
-def run_subprocess(cmd_args: list[str], info_str: str, working_dir: Path = None, 
-                   penv: dict[str, str] = None, use_shell: bool = False,
+def run_subprocess(cmd_args: list[str], info_str: str, working_dir: Path | None = None, 
+                   penv: dict[str, str] | None = None, use_shell: bool = False,
                    echo_cmd: bool = False) -> None:
     '''Run the given command while printing the given step string at the end of output.
 
@@ -238,7 +228,7 @@ def run_subprocess(cmd_args: list[str], info_str: str, working_dir: Path = None,
     proc = subprocess.Popen(cmd_args, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=False, 
                             cwd=working_dir, bufsize=0, env=penv, shell=use_shell)
 
-    while None == proc.poll():
+    while None == proc.poll()  and  proc.stdout:
         while True:
             # We need a number here or else this will block. On Unix, we can use os.set_blocking()
             # to disable this, but not on Windows.
@@ -276,7 +266,7 @@ def run_subprocess(cmd_args: list[str], info_str: str, working_dir: Path = None,
         raise subprocess.CalledProcessError(proc.returncode, cmd_args, except_output)
 
 
-def clone_from_git(url: str, branch: str = None, dest_directory: Path = None,
+def clone_from_git(url: str, branch: str = '', dest_directory: Path | None = None,
                    skip_if_exists: bool = False, full_clone: bool = False) -> None:
     '''Clone a git repo from the given url.
 
@@ -321,10 +311,6 @@ def clone_selected_repos_from_git(args: argparse.Namespace) -> None:
     '''
     if args.clone_all  or  'llvm' in args.steps  or  'runtimes' in args.steps:
         clone_from_git(LLVM_REPO_URL, args.llvm_branch, LLVM_SRC_DIR, 
-                    skip_if_exists=args.skip_existing, full_clone=args.full_clone)
-
-    if args.clone_all or 'musl' in args.steps:
-        clone_from_git(MUSL_REPO_URL, MUSL_REPO_BRANCH, MUSL_SRC_DIR, 
                     skip_if_exists=args.skip_existing, full_clone=args.full_clone)
 
     if args.clone_all or 'devfiles' in args.steps:
@@ -415,76 +401,12 @@ def build_two_stage_llvm(args: argparse.Namespace) -> None:
     run_subprocess(install_cmd, 'Install LLVM', build_dir)
 
 
-def build_musl(args: argparse.Namespace, variant: TargetVariant):
-    '''Build the Musl C library for a single variant.
-
-    Build the Musl library for the given target variant using its build options. The build and install
-    paths are determined by the path provided by the variant. This needs to be called after LLVM 
-    itself has been built because this needs LLVM to build Musl. Musl is just one library, but for 
-    compatibility with other C libraries Musl will build empty versions of libm, libpthread, and a 
-    few others. 
-    '''
-    build_dir = get_lib_build_dir('musl', variant)
-    prefix = get_lib_install_prefix(variant)
-    prefix_dir = Path(os.path.relpath(prefix, build_dir))
-    lib_dir = Path(os.path.relpath(prefix / variant.path / 'lib', build_dir))
-    src_dir = Path(os.path.relpath(MUSL_SRC_DIR, build_dir))
-
-    remake_dirs(build_dir)
-
-    #####
-    # Notes:
-    # --We need -mimplicit-it=always when building this for Thumb2 (and probably Thumb). This is
-    #   probably because I'm giving Musl a target of arm-none-eabi rather than armv7m-none-eabi.
-    # --We need -fomit-frame-pointer on at least Armv6-m or else Clang will complain that a syscall 
-    #   routine uses up too many registers.
-    # --The configure script just generates a config.mak file in the build directory. It might be easier
-    #   to either just generate that here or add all of those value to the environment. This would mean
-    #   not having to run the script on Windows, but it does mean we may fall behind script updates.
-    # --For Armv7(E)-M and Armv8M/8.1M Mainline, Clang defines both __thumb__ and __thumb2__.
-    # --For Armv6-M and Armv8-M.base, only __thumb__ is defined.
-
-    build_tool_path = get_lib_build_tool_abspath(args)
-
-    build_env = os.environ.copy()
-    build_env['AR'] = str(build_tool_path / 'bin' / 'llvm-ar')
-    build_env['RANLIB'] = str(build_tool_path / 'bin' / 'llvm-ranlib')
-    build_env['CC'] = str(build_tool_path / 'bin' / 'clang')
-    build_env['CFLAGS'] = ' '.join(variant.options) + ' -gline-tables-only'
-
-# TODO: Does this need to specify a custom version string since this is my branch of Musl?
-    gen_cmd = [
-        f'{src_dir.as_posix()}/configure', 
-        f'--prefix={prefix_dir.as_posix()}',
-        f'--libdir={lib_dir.as_posix()}',
-        '--disable-shared',
-        '--disable-wrapper',
-        '--disable-optimize',
-        '--disable-debug',
-        f'--target={variant.triple}'
-    ]
-    gen_build_info = f'Configure Musl ({get_lib_info_str(variant)})'
-    run_subprocess(gen_cmd, gen_build_info, build_dir, penv=build_env)
-
-    clean_cmd = ['make', 'clean']
-    clean_info = f'Clean Musl ({get_lib_info_str(variant)})'
-    run_subprocess(clean_cmd, clean_info, build_dir, penv=build_env)
-
-    build_cmd = ['make', '--output-sync=target', f'-j{args.compile_jobs}']
-    build_info = f'Build Musl ({get_lib_info_str(variant)})'
-    run_subprocess(build_cmd, build_info, build_dir, penv=build_env)
-
-    install_cmd = ['make', '-j1', 'install']
-    install_info = f'Install Musl ({get_lib_info_str(variant)})'
-    run_subprocess(install_cmd, install_info, build_dir, penv=build_env)
-
-
 def build_llvm_runtimes(args: argparse.Namespace, variant: TargetVariant):
     '''Build LLVM runtime libraries for a single build variant.
 
     Build libc++, libc++abi, libunwind, and Compiler-RT for the given build variant using its build
     options. The build and install paths of the libraries are determined by the path provided by the
-    variant. This needs to be called after LLVM and Musl have been built.
+    variant. This needs to be called after LLVM has been built.
     '''
     build_dir = get_lib_build_dir('runtimes', variant)
     prefix = get_lib_install_prefix(variant)
@@ -511,6 +433,7 @@ def build_llvm_runtimes(args: argparse.Namespace, variant: TargetVariant):
     gen_cmd = [
         'cmake', '-G', 'Ninja', 
         f'-DCMAKE_INSTALL_PREFIX={prefix_dir.as_posix()}',
+        f'-DCMAKE_BUILD_TYPE={args.llvm_build_type}',
         # This suffix goes up a level because the LLVM CMake scripts add an extra '/lib/' we don't want.
         f'-DPIC32CLANG_LIBDIR_SUFFIX=../{variant.path.as_posix()}/lib',
         f'-DPIC32CLANG_TARGET_TRIPLE={triple_str}',
@@ -791,9 +714,6 @@ def print_arg_info(args: argparse.Namespace) -> None:
     if args.clone_all  or  'llvm' in args.steps  or  'runtimes' in args.steps:
         print('Clone from llvm repo')
 
-    if args.clone_all or 'musl' in args.steps:
-        print('Clone from musl repo')
-
     if args.clone_all or 'devfiles' in args.steps:
         print('Clone from pic32-device-file-maker repo')
 
@@ -827,10 +747,6 @@ if '__main__' == __name__:
             build_two_stage_llvm(args)
 
     build_variants: list[TargetVariant] = pic32_target_variants.create_build_variants()
-
-    if 'musl' in args.steps:
-        for variant in build_variants:
-            build_musl(args, variant)
 
     if 'runtimes' in args.steps:
         for variant in build_variants:

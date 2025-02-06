@@ -43,7 +43,7 @@ Here are the command-line arguments you can supply to control how the script run
 
 - `--help` or `-h`  
     Print a brief summary of these arguments and then exit.
-- `--steps {[clone, llvm, musl, runtimes, devfiles, cmsis, startup, all]}`  
+- `--steps {[clone, llvm, runtimes, devfiles, cmsis, startup, all]}`  
     Select what this script should build and if it should clone the git repo for the selected 
     componenets first. Any combination of options works as long as at least one is provided. Use
     "all" to clone and build everything, which is the default.
@@ -51,10 +51,8 @@ Here are the command-line arguments you can supply to control how the script run
     - **clone**: Clone the needed git repos before building. The default is to clone only what is
     needed based on the other steps selected. Add the `--clone-all` argument to clone everything.
     - **llvm**: Build LLVM, Clang, and supporting tools.
-    - **musl**: Build the Musl C library for all supported device variants. A variant is a set of
-    target options like whether it is ARMv6-M vs ARMv7-M or whether or not is has an FPU.
-    - **runtimes**: Build libc++, Compiler-RT, and other runtime libraries for all supported device
-    variants.
+    - **runtimes**: Build llvm-libc, libc++, Compiler-RT, and other runtime libraries for all
+    supported device variants.
     - **devfiles**: Generate device-specific files like linker scripts, header files, and so on.
     - **cmsis**: Copy the Arm CMSIS files to their proper locations.
     - **startup**: Build the startup code for the devices with this toolchain. The other steps must
@@ -99,9 +97,8 @@ Here are the command-line arguments you can supply to control how the script run
     also the maximum allowed.
 - `--link-jobs`  
     Set the number of parallel link processes to run when building the LLVM tools. LLVM docs
-    recommend one process per 15GB of memory available. Musl uses 'compile-jobs' for building and
-    linking because its Makefile does not provide a way to separate those. The default is 0, which
-    will use one process per CPU. One per CPU is also the maximum allowed.
+    recommend one process per 15GB of memory available. The default is 0, which will use one
+    process per CPU. One per CPU is also the maximum allowed.
 - `--version`  
     Print the script's version info and then exit.
 

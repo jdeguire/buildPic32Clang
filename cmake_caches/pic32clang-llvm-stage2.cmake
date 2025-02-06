@@ -14,7 +14,7 @@
 set(LLVM_ENABLE_PROJECTS "clang;clang-tools-extra;lld;lldb;polly" CACHE STRING "")
 set(LLVM_ENABLE_RUNTIMES "" CACHE STRING "")
 
-set(LLVM_TARGETS_TO_BUILD ARM;Mips CACHE STRING "")
+set(LLVM_TARGETS_TO_BUILD host;ARM;Mips CACHE STRING "")
 
 # Add targets to build documentation using the Sphinx document generator. These
 # will not automatically build the docs; set LLVM_BUILD_DOCS to ON for that.
@@ -43,7 +43,7 @@ set(COMPILER_RT_BUILD_LIBFUZZER OFF CACHE BOOL "")
 set(COMPILER_RT_BUILD_PROFILE OFF CACHE BOOL "")
 set(COMPILER_RT_BUILD_MEMPROF OFF CACHE BOOL "")
 
-# Stuff that supposedly helps improve build times, mostly for debug builds.
+# Stuff that helps improve build times, mostly for debug builds.
 set(LLVM_OPTIMIZED_TABLEGEN ON CACHE BOOL "")
 set(LLVM_USE_SPLIT_DWARF ON CACHE BOOL "")
 
