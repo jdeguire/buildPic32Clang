@@ -72,8 +72,13 @@ list(APPEND PIC32CLANG_RUNTIME_FLAGS
     # Define them manually so that they work the same regardless of build platform.
     -D_LIBCPP_HAS_ALIGNED_ALLOC
     -D_LIBCPP_HAS_QUICK_EXIT
-    -D_LIBCPP_HAS_TIMESPEC_GET
-    -D_LIBCPP_HAS_C11_FEATURES)
+    # This is already defined by libc++ since we are using LLVM-libc.
+    #-D_LIBCPP_HAS_TIMESPEC_GET
+    -D_LIBCPP_HAS_C11_FEATURES
+    # The Libc build turns warning into errors and this prevents such an error from
+    # showing up an v6m targets. They do not support the ARM atomic instructions.
+    -Wno-atomic-alignment
+)
 
 list(JOIN PIC32CLANG_RUNTIME_FLAGS " " PIC32CLANG_RUNTIME_FLAGS)
 
@@ -117,15 +122,16 @@ set(CMAKE_TRY_COMPILE_TARGET_TYPE STATIC_LIBRARY CACHE STRING "")
 # -----
 # LLVM stuff
 #
-# TODO: Have a look at pic32clang/llvm/libcxx/cmake/caches/Armv7M-picolibc.cmake
-#       to see what other options we should add here.
-# TODO: Try building the docs here and in the stage2 CMake file. I need to turn on LLVM_BUILD_DOCS.
+# TODO: Try building the docs here and in the stage2 CMake file. I need to turn on LLVM_BUILD_DOCS
 #       to do that. See the other CMake file.
 set(LLVM_INCLUDE_DOCS ON CACHE BOOL "")
 set(LLVM_ENABLE_SPHINX ON CACHE BOOL "")
 set(LLVM_COMPILER_CHECKED ON CACHE BOOL "")
 set(LLVM_ENABLE_PER_TARGET_RUNTIME_DIR OFF CACHE BOOL "")
-set(LLVM_ENABLE_RUNTIMES "compiler-rt;libc;libcxx;libcxxabi;libunwind" CACHE STRING "")
+# set(LLVM_ENABLE_RUNTIMES "compiler-rt;libc;libcxx;libcxxabi;libunwind" CACHE STRING "")
+# TODO: We may not be able to use libunwind because libc does not have file-related stdio functions.
+#       Maybe re-enable it when I can stub out some of those.
+set(LLVM_ENABLE_RUNTIMES "compiler-rt;libc;libcxx;libcxxabi" CACHE STRING "")
 set(LLVM_LIBDIR_SUFFIX "/${PIC32CLANG_LIBDIR_SUFFIX}" CACHE STRING "")
 
 # -----
@@ -178,24 +184,66 @@ set(LLVM_LIBC_INCLUDE_SCUDO OFF CACHE BOOL "")
 set(LIBC_TARGET_TRIPLE ${PIC32CLANG_TARGET_TRIPLE} CACHE STRING "")
 set(LLVM_RUNTIME_TARGETS ${PIC32CLANG_TARGET_TRIPLE} CACHE STRING "")
 
+# Printf options:
+# Some of these are disabled by default for baremetal targets. Explicity put the options here
+# so we can tune them how we want.
+# See "llvm/libc/config/baremetal/config.json" for the defaults. 
+# See "llvm/libc/src/__support/float_to_string.h" and "llvm/libc/docs/dev/printf_behavior.rst"
+# for addittional explanations for these. 
+set(LIBC_CONF_PRINTF_DISABLE_INDEX_MODE ON CACHE STRING "")
+set(LIBC_CONF_PRINTF_DISABLE_STRERROR ON CACHE STRING "")
+set(LIBC_CONF_PRINTF_DISABLE_WRITE_INT ON CACHE STRING "")
+set(LIBC_CONF_PRINTF_DISABLE_FIXED_POINT OFF CACHE STRING "")
+set(LIBC_CONF_PRINTF_DISABLE_FLOAT OFF CACHE STRING "")
+set(LIBC_CONF_PRINTF_FLOAT_TO_STR_NO_SPECIALIZE_LD OFF CACHE STRING "")
+# TODO: We might want to try enabling these dyadic things.
+set(LIBC_CONF_PRINTF_FLOAT_TO_STR_USE_DYADIC_FLOAT OFF CACHE STRING "")
+set(LIBC_CONF_PRINTF_FLOAT_TO_STR_USE_DYADIC_FLOAT_LD OFF CACHE STRING "")
+set(LIBC_CONF_PRINTF_FLOAT_TO_STR_USE_FLOAT320 OFF CACHE STRING "")
+set(LIBC_CONF_PRINTF_FLOAT_TO_STR_USE_MEGA_LONG_DOUBLE_TABLE OFF CACHE STRING "")
+
+set(LIBC_CONF_SCANF_DISABLE_FLOAT OFF CACHE STRING "")
+set(LIBC_CONF_SCANF_DISABLE_INDEX_MODE ON CACHE STRING "")
+
 # -----
 # Libc++
 #
 # set(LIBCXX_HAS_MUSL_LIBC ON CACHE BOOL "")
 set(LIBCXX_ENABLE_STATIC ON CACHE BOOL "")
 set(LIBCXX_ENABLE_SHARED OFF CACHE BOOL "")
-set(LIBCXX_ENABLE_FILESYSTEM ON CACHE BOOL "")
 set(LIBCXX_ENABLE_EXPERIMENTAL_LIBRARY ON CACHE BOOL "")
 set(LIBCXX_CXX_ABI libcxxabi CACHE STRING "")
 set(LIBCXX_USE_COMPILER_RT ON CACHE BOOL "")
-set(LIBCXX_USE_LLVM_UNWINDER ON CACHE BOOL "")
-# set(LIBCXX_HAS_PTHREAD_API ON CACHE BOOL "")
 set(LIBCXX_ENABLE_TIME_ZONE_DATABASE OFF CACHE BOOL "")
+set(LIBCXX_INCLUDE_BENCHMARKS OFF CACHE BOOL "")
+
+# TODO: Disable filesystem for now and revisit this in the future. It would be nice to
+#       have a standard filesystem interface, even if we have to implement the underlying
+#       layer ourselves.
+# set(LIBCXX_ENABLE_FILESYSTEM ON CACHE BOOL "")
+set(LIBCXX_ENABLE_FILESYSTEM OFF CACHE BOOL "")
+# TODO: I had to disable the unwinder with LLVM-libc because it wanted to use a bunch of
+#       fprintf-like stuff. Maybe revisit this if I can stub those out.
+# set(LIBCXX_USE_LLVM_UNWINDER ON CACHE BOOL "")
+set(LIBCXX_USE_LLVM_UNWINDER OFF CACHE BOOL "")
 # Disable these for now because of an undefined symbol error for TIME_MONOTONIC
 # Threads must be disabled to disable the monotonic clock.
+# set(LIBCXX_HAS_PTHREAD_API ON CACHE BOOL "")
 set(LIBCXX_ENABLE_MONOTONIC_CLOCK OFF CACHE BOOL "")
 set(LIBCXX_ENABLE_THREADS OFF CACHE BOOL "")
 set(LIBCXX_HAS_PTHREAD_API OFF CACHE BOOL "")
+# We need to disable wide character support because LLVM-libc does not yet support wchar stuff.
+set(LIBCXX_ENABLE_WIDE_CHARACTERS OFF CACHE BOOL "")
+# LLVM-libc does not include locale stuff in the baremetal build. This ends up disabling a lot of
+# the stream interface, but we avoid those on embedded anyway.
+set(LIBCXX_ENABLE_LOCALIZATION OFF CACHE BOOL "")
+# TODO: Turn this off for now but revisit it in the future. I'm not sure what it does.
+#       Really, anything in embedded would be a terminal, but maybe we want this off if
+#       libc++ will use this to try printing ANSI escape codes or something.
+set(LIBCXX_HAS_TERMINAL_AVAILABLE OFF CACHE BOOL "")
+# TODO: Maybe revisit this if we can create a way to access random number generators on
+#       some of our devices.
+set(LIBCXX_ENABLE_RANDOM_DEVICE OFF CACHE BOOL "")
 
 # -----
 # Libc++abi
@@ -203,12 +251,15 @@ set(LIBCXX_HAS_PTHREAD_API OFF CACHE BOOL "")
 set(LIBCXXABI_BAREMETAL ON CACHE BOOL "")
 set(LIBCXXABI_ENABLE_STATIC ON CACHE BOOL "")
 set(LIBCXXABI_ENABLE_SHARED OFF CACHE BOOL "")
-set(LIBCXXABI_USE_LLVM_UNWINDER ON CACHE BOOL "")
+# set(LIBCXXABI_USE_LLVM_UNWINDER ON CACHE BOOL "")
+set(LIBCXXABI_USE_LLVM_UNWINDER OFF CACHE BOOL "")
 set(LIBCXXABI_USE_COMPILER_RT ON CACHE BOOL "")
 # set(LIBCXXABI_HAS_PTHREAD_API ON CACHE BOOL "")
 # Disable these for now to match libcxx a few lines above.
 set(LIBCXXABI_HAS_PTHREAD_API OFF CACHE BOOL "")
 set(LIBCXXABI_ENABLE_THREADS OFF CACHE BOOL "")
+set(LIBCXXABI_ENABLE_ASSERTIONS OFF CACHE BOOL "")
+set(LIBCXXABI_ENABLE_EXCEPTIONS ON CACHE BOOL "")
 
 # This prints out variables and was found on Stack Overflow.
 #get_cmake_property(_variableNames VARIABLES)

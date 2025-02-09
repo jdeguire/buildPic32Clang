@@ -401,6 +401,49 @@ def build_two_stage_llvm(args: argparse.Namespace) -> None:
     run_subprocess(install_cmd, 'Install LLVM', build_dir)
 
 
+def add_stdio_file_decls() -> None:
+    '''Add a minimal set of file I/O function declarations to LLVM-libc stdio.h to get libc++ to
+    build, such as vfprintf(), feof(), ferror(), and so on.
+    '''
+    stdio_h_path: Path = INSTALL_PREFIX / 'cortex-m' / 'include' / 'stdio.h'
+    stdio_list: list[str] = []
+    update_index: int = -1
+
+    # First, read the current file into a list. Each line is an element of the list.
+    with open(stdio_h_path, 'r', encoding='utf-8') as stdio_in:
+        stdio_list = list(stdio_in)
+
+    # Now, check if the file has already been updated. For now, we'll just look for one file IO
+    # function declaration and assume we already updated the file if we see it.
+    for line_no, line_str in enumerate(stdio_list):
+        if 'vfprintf' in line_str:
+            # Found this, so assume file was already updated.
+            break
+
+        if '__END_C_DECLS' in line_str:
+            # Found end of declarations, so remember where we are so we can add our declarations.
+            update_index = line_no
+            break
+
+    if update_index < 0:
+        return
+    
+    # We need to update the file, so overwrite it while adding our new declarations.
+    with open(stdio_h_path, 'w', encoding='utf-8') as stdio_out:
+        for line_no, line_str in enumerate(stdio_list):
+            if line_no == update_index:
+                stdio_out.write('/* Manually added minimal stdio file functions needed for libc++.\n')
+                stdio_out.write('   Users will need to implement these own their own. */\n')
+                stdio_out.write('int vfprintf(FILE *__restrict, const char *__restrict, va_list) __NOEXCEPT;\n')
+                stdio_out.write('size_t fwrite(const void *__restrict, size_t, size_t, FILE *__restrict) __NOEXCEPT;\n')
+                stdio_out.write('int ferror(FILE *) __NOEXCEPT;\n')
+                stdio_out.write('int feof(FILE *) __NOEXCEPT;\n')
+                stdio_out.write('int fflush(FILE *) __NOEXCEPT;\n')
+                stdio_out.write('\n')
+
+            stdio_out.write(line_str)
+
+
 def build_llvm_runtimes(args: argparse.Namespace, variant: TargetVariant):
     '''Build LLVM runtime libraries for a single build variant.
 
@@ -447,13 +490,35 @@ def build_llvm_runtimes(args: argparse.Namespace, variant: TargetVariant):
     gen_build_info = f'Generate runtimes build script ({get_lib_info_str(variant)})'
     run_subprocess(gen_cmd, gen_build_info, build_dir)
 
-    build_cmd = ['cmake', '--build', '.']
-    build_info = f'Build runtimes ({get_lib_info_str(variant)})'
-    run_subprocess(build_cmd, build_info, build_dir)
+    # TODO: We need to build the runtimes in a particular order. Compiler-RT first, then libc, then
+    #       the rest. Figure out what the build targets are to do that. We might be able to just use
+    #       the "install" targets instead of doing a build then install.
+    # TODO: Eventually add back libunwind. We should be able to add it just before libcxxabi.
+    # build_cmd = ['cmake', '--build', '.']
+    # build_info = f'Build runtimes ({get_lib_info_str(variant)})'
+    # run_subprocess(build_cmd, build_info, build_dir)
 
-    install_cmd = ['cmake', '--build', '.', '--target', 'install']
-    install_info = f'Install runtimes ({get_lib_info_str(variant)})'
-    run_subprocess(install_cmd, install_info, build_dir)
+    # install_cmd = ['cmake', '--build', '.', '--target', 'install']
+    # install_info = f'Install runtimes ({get_lib_info_str(variant)})'
+    # run_subprocess(install_cmd, install_info, build_dir)
+
+    run_subprocess(['cmake', '--build', '.', '--target', 'install-compiler-rt'],
+                   f'Build/Install Compiler-RT ({get_lib_info_str(variant)})',
+                   build_dir)
+
+    run_subprocess(['cmake', '--build', '.', '--target', 'install-libc'],
+                   f'Build/Install LLVM-libc ({get_lib_info_str(variant)})',
+                   build_dir)
+
+    add_stdio_file_decls()
+
+    run_subprocess(['cmake', '--build', '.', '--target', 'install-cxxabi'],
+                   f'Build/Install libcxxabi ({get_lib_info_str(variant)})',
+                   build_dir)
+
+    run_subprocess(['cmake', '--build', '.', '--target', 'install-cxx'],
+                   f'Build/Install libcxx ({get_lib_info_str(variant)})',
+                   build_dir)
 
     # Compiler-RT is built to include the arch name in the library name unless we let CMake decide
     # the directories to install them (option LLVM_ENABLE_PER_TARGET_RUNTIME_DIR). That ends up
