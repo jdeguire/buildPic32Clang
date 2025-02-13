@@ -434,6 +434,7 @@ def add_stdio_file_decls() -> None:
             if line_no == update_index:
                 stdio_out.write('/* Manually added minimal stdio file functions needed for libc++.\n')
                 stdio_out.write('   Users will need to implement these own their own. */\n')
+                stdio_out.write('int fprintf(FILE *__restrict, const char *__restrict, ... ) __NOEXCEPT;\n')
                 stdio_out.write('int vfprintf(FILE *__restrict, const char *__restrict, va_list) __NOEXCEPT;\n')
                 stdio_out.write('size_t fwrite(const void *__restrict, size_t, size_t, FILE *__restrict) __NOEXCEPT;\n')
                 stdio_out.write('int ferror(FILE *) __NOEXCEPT;\n')
@@ -494,6 +495,11 @@ def build_llvm_runtimes(args: argparse.Namespace, variant: TargetVariant):
     #       the rest. Figure out what the build targets are to do that. We might be able to just use
     #       the "install" targets instead of doing a build then install.
     # TODO: Eventually add back libunwind. We should be able to add it just before libcxxabi.
+    # TODO: We might be able to provide our own configuration to tell libc to include file IO, wchar,
+    #       and other stuff. Look at LIBC_CONFIG_PATH.
+    # TODO: If we add file IO, do we need to also add fopencookie to convert our file IO cookies
+    #       into C file objects?
+
     # build_cmd = ['cmake', '--build', '.']
     # build_info = f'Build runtimes ({get_lib_info_str(variant)})'
     # run_subprocess(build_cmd, build_info, build_dir)
@@ -512,6 +518,10 @@ def build_llvm_runtimes(args: argparse.Namespace, variant: TargetVariant):
 
     add_stdio_file_decls()
 
+    run_subprocess(['cmake', '--build', '.', '--target', 'install-unwind'],
+                   f'Build/Install libcxxabi ({get_lib_info_str(variant)})',
+                   build_dir)
+
     run_subprocess(['cmake', '--build', '.', '--target', 'install-cxxabi'],
                    f'Build/Install libcxxabi ({get_lib_info_str(variant)})',
                    build_dir)
@@ -524,6 +534,7 @@ def build_llvm_runtimes(args: argparse.Namespace, variant: TargetVariant):
     # the directories to install them (option LLVM_ENABLE_PER_TARGET_RUNTIME_DIR). That ends up
     # being a pain for other reasons, but we need to remove the arch from the library name to help
     # Clang find Compiler-RT in our arch-specific directory structure.
+    # TODO: Armv8.1m.main targets with MVE are missing these files. Did we mess up or did the build?
     compiler_rt_path = prefix / variant.path / 'lib'
     for crt in compiler_rt_path.iterdir():
         if crt.name.startswith('libclang_rt.'):
@@ -533,6 +544,12 @@ def build_llvm_runtimes(args: argparse.Namespace, variant: TargetVariant):
             subname = crt.stem[9:].split('-', 1)
             crt.rename(crt.parent / f'clang_rt.{subname[0]}{crt.suffix}')
 
+    # LLVM-libc puts the outpus into a per-target directory. We already handle this, so move the
+    # libc files up a level to be with the rest of the libraries.
+    libc_path = prefix / variant.path / 'lib' / triple_str
+    for libc in libc_path.iterdir():
+        libc.rename(libc.parent.parent / libc.name)
+    libc_path.rmdir()
 
 def build_device_files(args: argparse.Namespace) -> None:
     '''Build the device-specific files like headers file and linker scripts.
