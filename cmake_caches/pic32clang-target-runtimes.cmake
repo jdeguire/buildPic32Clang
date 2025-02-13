@@ -128,10 +128,7 @@ set(LLVM_INCLUDE_DOCS ON CACHE BOOL "")
 set(LLVM_ENABLE_SPHINX ON CACHE BOOL "")
 set(LLVM_COMPILER_CHECKED ON CACHE BOOL "")
 set(LLVM_ENABLE_PER_TARGET_RUNTIME_DIR OFF CACHE BOOL "")
-# set(LLVM_ENABLE_RUNTIMES "compiler-rt;libc;libcxx;libcxxabi;libunwind" CACHE STRING "")
-# TODO: We may not be able to use libunwind because libc does not have file-related stdio functions.
-#       Maybe re-enable it when I can stub out some of those.
-set(LLVM_ENABLE_RUNTIMES "compiler-rt;libc;libcxx;libcxxabi" CACHE STRING "")
+set(LLVM_ENABLE_RUNTIMES "compiler-rt;libc;libcxx;libcxxabi;libunwind" CACHE STRING "")
 set(LLVM_LIBDIR_SUFFIX "/${PIC32CLANG_LIBDIR_SUFFIX}" CACHE STRING "")
 
 # -----
@@ -170,9 +167,11 @@ set(COMPILER_RT_SCUDO_STANDALONE_BUILD_SHARED OFF CACHE BOOL "")
 #
 set(LIBUNWIND_ENABLE_STATIC ON CACHE BOOL "")
 set(LIBUNWIND_ENABLE_SHARED OFF CACHE BOOL "")
+set(LIBUNWIND_ENABLE_THREADS OFF CACHE BOOL "")
 set(LIBUNWIND_USE_COMPILER_RT ON CACHE BOOL "")
 set(LIBUNWIND_ENABLE_CROSS_UNWINDING OFF CACHE BOOL "")
 set(LIBUNWIND_IS_BAREMETAL ON CACHE BOOL "")
+set(LIBUNWIND_ENABLE_ASSERTIONS OFF CACHE BOOL "")
 
 # -----
 # LLVM-libc
@@ -182,7 +181,6 @@ set(LIBUNWIND_IS_BAREMETAL ON CACHE BOOL "")
 set(LLVM_LIBC_FULL_BUILD ON CACHE BOOL "")
 set(LLVM_LIBC_INCLUDE_SCUDO OFF CACHE BOOL "")
 set(LIBC_TARGET_TRIPLE ${PIC32CLANG_TARGET_TRIPLE} CACHE STRING "")
-set(LLVM_RUNTIME_TARGETS ${PIC32CLANG_TARGET_TRIPLE} CACHE STRING "")
 
 # Printf options:
 # Some of these are disabled by default for baremetal targets. Explicity put the options here
@@ -222,10 +220,7 @@ set(LIBCXX_INCLUDE_BENCHMARKS OFF CACHE BOOL "")
 #       layer ourselves.
 # set(LIBCXX_ENABLE_FILESYSTEM ON CACHE BOOL "")
 set(LIBCXX_ENABLE_FILESYSTEM OFF CACHE BOOL "")
-# TODO: I had to disable the unwinder with LLVM-libc because it wanted to use a bunch of
-#       fprintf-like stuff. Maybe revisit this if I can stub those out.
-# set(LIBCXX_USE_LLVM_UNWINDER ON CACHE BOOL "")
-set(LIBCXX_USE_LLVM_UNWINDER OFF CACHE BOOL "")
+set(LIBCXX_USE_LLVM_UNWINDER ON CACHE BOOL "")
 # Disable these for now because of an undefined symbol error for TIME_MONOTONIC
 # Threads must be disabled to disable the monotonic clock.
 # set(LIBCXX_HAS_PTHREAD_API ON CACHE BOOL "")
@@ -251,8 +246,7 @@ set(LIBCXX_ENABLE_RANDOM_DEVICE OFF CACHE BOOL "")
 set(LIBCXXABI_BAREMETAL ON CACHE BOOL "")
 set(LIBCXXABI_ENABLE_STATIC ON CACHE BOOL "")
 set(LIBCXXABI_ENABLE_SHARED OFF CACHE BOOL "")
-# set(LIBCXXABI_USE_LLVM_UNWINDER ON CACHE BOOL "")
-set(LIBCXXABI_USE_LLVM_UNWINDER OFF CACHE BOOL "")
+set(LIBCXXABI_USE_LLVM_UNWINDER ON CACHE BOOL "")
 set(LIBCXXABI_USE_COMPILER_RT ON CACHE BOOL "")
 # set(LIBCXXABI_HAS_PTHREAD_API ON CACHE BOOL "")
 # Disable these for now to match libcxx a few lines above.
