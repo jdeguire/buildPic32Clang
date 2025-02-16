@@ -51,7 +51,8 @@ struct __llvm_libc_stdio_cookie
 /* These cookies are ways for LLVM-libc to tell you which stream to read from or write to. You would
    check if the stream passed to one of the below functions matches one of these and perform the
    appropriate action if so. Chances are an embedded application will dump both stdout and stderr to
-   the same location, such as a serial port, but they don't have to.
+   the same location, such as a serial port, but they don't have to. From what I can tell, libc
+   uses stderr for printf(), puts(), and so on.
    
    These cookie declarations and the below functions would be 'extern "C"' in a cpp file.
    */
@@ -168,10 +169,6 @@ int main()
     PORT_REGS->GROUP[serial_group].PORT_DIRSET = (1 << serial_pin);
     PORT_REGS->GROUP[serial_group].PORT_OUTSET = (1 << serial_pin);     // serial idles high
 
-#warning TOOD: Do I need to turn off buffering for the IO?
-    // LLVM-libc might already not buffer since it presumably would just call your stdio functions
-    // above. It'd be up to you to buffer.
-
     while(true)
     {
         DelayMs(1000);
@@ -187,7 +184,7 @@ int main()
 
 
 /* We're going to bit-bang a serial port because I don't feel like trying to figure out how the
-   SERCOM peripheral on the PIC32CZ works right now. I mean, the datasheet is probably wrong, anyway,
+   SERCOM peripheral on the PIC32CZ works right now. I mean, the datasheet is probably wrong anyway,
    if my past experience holds true.
 
    This will output using port pin PC0. On the PIC32CZ CA80 Curiosity Ultra board I'm using, this
