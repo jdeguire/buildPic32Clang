@@ -188,15 +188,16 @@ set(LIBC_TARGET_TRIPLE ${PIC32CLANG_TARGET_TRIPLE} CACHE STRING "")
 # See "llvm/libc/config/baremetal/config.json" for the defaults. 
 # See "llvm/libc/src/__support/float_to_string.h" and "llvm/libc/docs/dev/printf_behavior.rst"
 # for addittional explanations for these. 
+# TODO: Figure out how to make errno thread-local now that we support thread-local storage.
+#       Currently we provide a callback function to get a global errno. This is in the startup code.
 set(LIBC_CONF_PRINTF_DISABLE_INDEX_MODE ON CACHE STRING "")
 set(LIBC_CONF_PRINTF_DISABLE_STRERROR ON CACHE STRING "")
 set(LIBC_CONF_PRINTF_DISABLE_WRITE_INT ON CACHE STRING "")
 set(LIBC_CONF_PRINTF_DISABLE_FIXED_POINT OFF CACHE STRING "")
 set(LIBC_CONF_PRINTF_DISABLE_FLOAT OFF CACHE STRING "")
+# TODO: Try messing with these to get the printf() size down. It's 150kB right now!
 set(LIBC_CONF_PRINTF_FLOAT_TO_STR_NO_SPECIALIZE_LD OFF CACHE STRING "")
-# TODO: We might want to try enabling these dyadic things.
 set(LIBC_CONF_PRINTF_FLOAT_TO_STR_USE_DYADIC_FLOAT OFF CACHE STRING "")
-set(LIBC_CONF_PRINTF_FLOAT_TO_STR_USE_DYADIC_FLOAT_LD OFF CACHE STRING "")
 set(LIBC_CONF_PRINTF_FLOAT_TO_STR_USE_FLOAT320 OFF CACHE STRING "")
 set(LIBC_CONF_PRINTF_FLOAT_TO_STR_USE_MEGA_LONG_DOUBLE_TABLE OFF CACHE STRING "")
 
