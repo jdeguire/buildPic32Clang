@@ -201,6 +201,8 @@ set(LIBC_CONF_PRINTF_FLOAT_TO_STR_USE_DYADIC_FLOAT OFF CACHE STRING "")
 set(LIBC_CONF_PRINTF_FLOAT_TO_STR_USE_FLOAT320 OFF CACHE STRING "")
 set(LIBC_CONF_PRINTF_FLOAT_TO_STR_USE_MEGA_LONG_DOUBLE_TABLE OFF CACHE STRING "")
 
+# TODO: What happens if we define LIBC_COPT_FLOAT_TO_STR_NO_TABLE ? There is no CMake option for this.
+
 set(LIBC_CONF_SCANF_DISABLE_FLOAT OFF CACHE STRING "")
 set(LIBC_CONF_SCANF_DISABLE_INDEX_MODE ON CACHE STRING "")
 
@@ -216,6 +218,11 @@ set(LIBCXX_ENABLE_STATIC_ABI_LIBRARY ON CACHE BOOL "")
 set(LIBCXX_USE_COMPILER_RT ON CACHE BOOL "")
 set(LIBCXX_ENABLE_TIME_ZONE_DATABASE OFF CACHE BOOL "")
 set(LIBCXX_INCLUDE_BENCHMARKS OFF CACHE BOOL "")
+
+# TODO: Libc++ might be including its own giant tables for its own std::print stuff. Are there
+#       options to reduce those like with Libc? It's basically including duplicates.
+# TODO: Do I need to disable Unicode with LIBCXX_ENABLE_UNICODE set to OFF? The tables are big,
+#       but are they *that* big?
 
 # TODO: Disable filesystem for now and revisit this in the future. It would be nice to
 #       have a standard filesystem interface, even if we have to implement the underlying
