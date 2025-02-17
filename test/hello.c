@@ -207,11 +207,18 @@ int main()
         // use the USE_DYADIC_FLOAT option because otherwise printf() uses tables that take an extra
         // 100kB of space!
         //
-        // With no optimizations when building this code and the USE_FLOAT320 CMake option enabled,
-        // those two print times are about 0.1ms and 0.35ms, respectively. Without that option, we
-        // get about 0.1ms and 0.18ms, respectively. That is much faster for doubles but at the
-        // expense of about 10kB extra space. Adding O1 optimization here has little effect on flash
-        // usage, but drops the times to 0.087ms and 0.167ms. 
+        // With no optimizations and USE_FLOAT320 CMake option on, flash usage is about 47.4kB.
+        // Those two print times are about 0.1ms and 0.35ms, respectively. With USE_FLOAT32 off, 
+        // flash usage rises to about 58.8kb. The times are about 0.1ms and 0.18ms, respectively.
+        // That is much faster for doubles at the expense of extra flash usage.
+        // 
+        // With O1 optimization and USE_FLOAT320 off, flash usage changes little to about 58.3kB.
+        // The times drop to 0.087ms and 0.167ms.
+        //
+        // With no optimizations, USE_FLOAT320 off, and LIBC_COPT_FLOAT_TO_STR_NO_TABLE defined,
+        // flash usage is about 56.4kB. The times are about 0.1ms and 0.186ms. With USE_FLOAT32 on,
+        // flash usage is about 47.4kB. The times are about 0.1ms and 0.37ms. In other words, that
+        // define saves a couple of kB in the USE_FLOAT320 off case with little other impact.
     }
 
     return 0;
