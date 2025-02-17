@@ -30,7 +30,8 @@
 #  warning This was tested on a PIC32C device only.
 #endif
 
-static void write_serial_byte(char c);
+static void add_serial_byte(char c);
+static void send_pending_serial_data(void);
 
 /*******
  * START OF LLVM LIBC STUFF
@@ -97,7 +98,7 @@ ssize_t __llvm_libc_stdio_write(void *cookie, const char *buf, size_t size)
     {
         for(int i = 0; i < size; ++i)
         {
-            write_serial_byte(buf[i]);
+            add_serial_byte(buf[i]);
         }
 
         bytes_written = size;
@@ -109,6 +110,21 @@ ssize_t __llvm_libc_stdio_write(void *cookie, const char *buf, size_t size)
 /*******
  * END OF LLVM LIBC STUFF
  *******/
+
+
+/* This board has LEDs on PB21 and PB22. This will use PB21. If the LED works, then we know that
+   these static variables are getting initialized correctly from the .data initialization code
+   in the startup module.
+   */
+static uint32_t led_group = 1;         // group 0 is Port A, group 1 is Port B, etc.
+static uint32_t led_pin = 21;
+static uint32_t blink_count = 0;
+
+/* We will use pin PC0 for a bit-banged serial port. On the PIC32CZ CA80 Curiosity Ultra board I'm 
+   using, this goes out to pin 11 of header EXT1.
+   */
+static uint32_t serial_group = 2;
+static uint32_t serial_pin = 0;
 
 
 static void DelaySysTicks(uint32_t ticks)
@@ -141,21 +157,9 @@ static void DelayMs(uint32_t ms)
         DelaySysTicks(ms * 48000);
 }
 
-/* This board has LEDs on PB21 and PB22. This will use PB21.
-   */
-uint32_t led_group = 1;         // group 0 is Port A, group 1 is Port B, etc.
-uint32_t led_pin = 21;
-uint32_t blink_count = 0;
-
-/* We will use pin PC0 for a bit-banged serial port. On the PIC32CZ CA80 Curiosity Ultra board I'm 
-   using, this goes out to pin 11 of header EXT1.
-   */
-uint32_t serial_group = 2;
-uint32_t serial_pin = 0;
 
 int main()
 {
-
     // There is one PINCFG register per port pin.
     // This disables slew rate control, open-drain, pull-ups or -downs (depends on the OUT bit), the
     // input buffer, and the peripheral mux (so the PORT controls the pin).
@@ -171,11 +175,43 @@ int main()
 
     while(true)
     {
+        double print_time;
+
         DelayMs(1000);
+        ++blink_count;
         PORT_REGS->GROUP[led_group].PORT_OUTTGL = (1 << led_pin);
 
-        ++blink_count;
+        // Use the 24-bit countdown timer to time our print. At 48MHz, we have just under 350ms.
+        SysTick->LOAD = 0xFFFFFF;
+        SysTick->VAL = 0;
+        SysTick->CTRL = (SysTick_CTRL_CLKSOURCE_Msk | SysTick_CTRL_ENABLE_Msk);
         printf("Hello! Times blinked: %u\n", blink_count);
+        print_time = (double)(0xFFFFFF - SysTick->VAL);
+        SysTick->CTRL = 0;
+
+        SysTick->LOAD = 0xFFFFFF;
+        SysTick->VAL = 0;
+        SysTick->CTRL = (SysTick_CTRL_CLKSOURCE_Msk | SysTick_CTRL_ENABLE_Msk);
+        printf("->that last print took %fms\n", (print_time / 48000.0));
+        print_time = (double)(0xFFFFFF - SysTick->VAL);
+        SysTick->CTRL = 0;
+
+        printf("---> and THAT last print took %fms\n", (print_time / 48000.0));
+
+        send_pending_serial_data();
+
+        // NOTE:
+        // Here are some performance numbers. We leave the CPU running at its default 48MHz and the
+        // libraries should be built with O2 optimizations. There are a couple of CMake options we
+        // can tweak in ../cmake_caches/pic32clang-target-runtimes.cmake. In particular, we need to
+        // use the USE_DYADIC_FLOAT option because otherwise printf() uses tables that take an extra
+        // 100kB of space!
+        //
+        // With no optimizations when building this code and the USE_FLOAT320 CMake option enabled,
+        // those two print times are about 0.1ms and 0.35ms, respectively. Without that option, we
+        // get about 0.1ms and 0.18ms, respectively. That is much faster for doubles but at the
+        // expense of about 10kB extra space. Adding O1 optimization here has little effect on flash
+        // usage, but drops the times to 0.087ms and 0.167ms. 
     }
 
     return 0;
@@ -190,28 +226,47 @@ int main()
    This will output using port pin PC0. On the PIC32CZ CA80 Curiosity Ultra board I'm using, this
    goes out to pin 11 of header EXT1.
    */
-static void write_serial_byte(char c)
+static char serial_buf[512];
+static int serial_count = 0;
+
+static void add_serial_byte(char c)
+{
+    serial_buf[serial_count] = c;
+    ++serial_count;
+}
+
+static void send_pending_serial_data()
 {
 // 19200 baud
 #define kSerialDelay  (48000000 / 19200)
 
-    // Start bit: go from idle (high) to active (low)
-    PORT_REGS->GROUP[serial_group].PORT_OUTCLR = (1 << serial_pin);
-    DelaySysTicks(kSerialDelay);
+    char *bufptr = serial_buf;
 
-    // Data bits
-    for(int i = 0; i < 8; ++i)
+    while(serial_count > 0)
     {
-        if(c & 0x01)
-            PORT_REGS->GROUP[serial_group].PORT_OUTSET = (1 << serial_pin);
-        else
-            PORT_REGS->GROUP[serial_group].PORT_OUTCLR = (1 << serial_pin);
+        char c = *bufptr;
+        // Start bit: go from idle (high) to active (low)
 
+        PORT_REGS->GROUP[serial_group].PORT_OUTCLR = (1 << serial_pin);
         DelaySysTicks(kSerialDelay);
-        c >>= 1;
-    }
 
-    // Stop bit: go back to idle (high)
-    PORT_REGS->GROUP[serial_group].PORT_OUTSET = (1 << serial_pin);
-    DelaySysTicks(kSerialDelay);
+        // Data bits
+        for(int i = 0; i < 8; ++i)
+        {
+            if(c & 0x01)
+                PORT_REGS->GROUP[serial_group].PORT_OUTSET = (1 << serial_pin);
+            else
+                PORT_REGS->GROUP[serial_group].PORT_OUTCLR = (1 << serial_pin);
+
+            DelaySysTicks(kSerialDelay);
+            c >>= 1;
+        }
+
+        // Stop bit: go back to idle (high)
+        PORT_REGS->GROUP[serial_group].PORT_OUTSET = (1 << serial_pin);
+        DelaySysTicks(kSerialDelay);
+
+        --serial_count;
+        ++bufptr;
+    }
 }
