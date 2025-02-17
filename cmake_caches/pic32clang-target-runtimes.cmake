@@ -197,7 +197,7 @@ set(LIBC_CONF_PRINTF_DISABLE_FIXED_POINT OFF CACHE STRING "")
 set(LIBC_CONF_PRINTF_DISABLE_FLOAT OFF CACHE STRING "")
 # TODO: Try messing with these to get the printf() size down. It's 150kB right now!
 set(LIBC_CONF_PRINTF_FLOAT_TO_STR_NO_SPECIALIZE_LD OFF CACHE STRING "")
-set(LIBC_CONF_PRINTF_FLOAT_TO_STR_USE_DYADIC_FLOAT OFF CACHE STRING "")
+set(LIBC_CONF_PRINTF_FLOAT_TO_STR_USE_DYADIC_FLOAT ON CACHE STRING "")
 set(LIBC_CONF_PRINTF_FLOAT_TO_STR_USE_FLOAT320 OFF CACHE STRING "")
 set(LIBC_CONF_PRINTF_FLOAT_TO_STR_USE_MEGA_LONG_DOUBLE_TABLE OFF CACHE STRING "")
 
@@ -218,6 +218,13 @@ set(LIBCXX_ENABLE_STATIC_ABI_LIBRARY ON CACHE BOOL "")
 set(LIBCXX_USE_COMPILER_RT ON CACHE BOOL "")
 set(LIBCXX_ENABLE_TIME_ZONE_DATABASE OFF CACHE BOOL "")
 set(LIBCXX_INCLUDE_BENCHMARKS OFF CACHE BOOL "")
+
+set(LIBCXX_ENABLE_EXCEPTIONS ON CACHE BOOL "")
+set(LIBCXX_HARDENING_MODE fast CACHE STRING "")
+
+# TODO: Do I need to get the LIBCXX_LIBC option to work? Setting that to "llvm-libc" makes the build
+#       fail because it does not see my modified headers with file IO stuff. Maybe I just need to
+#       make a real configuration for us with our own entrypoints file.
 
 # TODO: Libc++ might be including its own giant tables for its own std::print stuff. Are there
 #       options to reduce those like with Libc? It's basically including duplicates.
