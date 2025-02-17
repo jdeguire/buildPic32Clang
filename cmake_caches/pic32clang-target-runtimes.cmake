@@ -102,7 +102,7 @@ set(CMAKE_ASM_FLAGS "${CMAKE_ASM_FLAGS} ${PIC32CLANG_RUNTIME_FLAGS}" CACHE STRIN
 # good balance of size and speed for embedded libraries. CMake will by default use O3 for release
 # builds, but that can make the resulting binary larger than O2.
 set(CMAKE_C_FLAGS_RELEASE "-O2 -DNDEBUG" CACHE STRING "")
-set(CMAKE_CXX_FLAGS_RELEASE"-O2 -DNDEBUG" CACHE STRING "")
+set(CMAKE_CXX_FLAGS_RELEASE "-O2 -DNDEBUG" CACHE STRING "")
 set(CMAKE_ASM_FLAGS_RELEASE "-O2 -DNDEBUG" CACHE STRING "")
 
 set(CMAKE_C_FLAGS_DEBUG "-g" CACHE STRING "")

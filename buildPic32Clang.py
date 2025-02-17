@@ -491,22 +491,8 @@ def build_llvm_runtimes(args: argparse.Namespace, variant: TargetVariant):
     gen_build_info = f'Generate runtimes build script ({get_lib_info_str(variant)})'
     run_subprocess(gen_cmd, gen_build_info, build_dir)
 
-    # TODO: We need to build the runtimes in a particular order. Compiler-RT first, then libc, then
-    #       the rest. Figure out what the build targets are to do that. We might be able to just use
-    #       the "install" targets instead of doing a build then install.
-    # TODO: Eventually add back libunwind. We should be able to add it just before libcxxabi.
     # TODO: We might be able to provide our own configuration to tell libc to include file IO, wchar,
     #       and other stuff. Look at LIBC_CONFIG_PATH.
-    # TODO: If we add file IO, do we need to also add fopencookie to convert our file IO cookies
-    #       into C file objects?
-
-    # build_cmd = ['cmake', '--build', '.']
-    # build_info = f'Build runtimes ({get_lib_info_str(variant)})'
-    # run_subprocess(build_cmd, build_info, build_dir)
-
-    # install_cmd = ['cmake', '--build', '.', '--target', 'install']
-    # install_info = f'Install runtimes ({get_lib_info_str(variant)})'
-    # run_subprocess(install_cmd, install_info, build_dir)
 
     run_subprocess(['cmake', '--build', '.', '--target', 'install-compiler-rt'],
                    f'Build/Install Compiler-RT ({get_lib_info_str(variant)})',
@@ -544,7 +530,7 @@ def build_llvm_runtimes(args: argparse.Namespace, variant: TargetVariant):
             subname = crt.stem[9:].split('-', 1)
             crt.rename(crt.parent / f'clang_rt.{subname[0]}{crt.suffix}')
 
-    # LLVM-libc puts the outpus into a per-target directory. We already handle this, so move the
+    # LLVM-libc puts the outputs into a per-target directory. We already handle this, so move the
     # libc files up a level to be with the rest of the libraries.
     libc_path = prefix / variant.path / 'lib' / triple_str
     for libc in libc_path.iterdir():
