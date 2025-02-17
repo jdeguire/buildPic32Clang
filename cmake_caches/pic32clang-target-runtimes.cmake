@@ -78,6 +78,9 @@ list(APPEND PIC32CLANG_RUNTIME_FLAGS
     # The Libc build turns warning into errors and this prevents such an error from
     # showing up an v6m targets. They do not support the ARM atomic instructions.
     -Wno-atomic-alignment
+    # There is currently no CMake option for this, but this define appears to remove
+    # the usage of tables in libc's printf() float conversions if they are not needed.
+    -DLIBC_COPT_FLOAT_TO_STR_NO_TABLE
 )
 
 list(JOIN PIC32CLANG_RUNTIME_FLAGS " " PIC32CLANG_RUNTIME_FLAGS)
@@ -93,12 +96,27 @@ set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} ${PIC32CLANG_RUNTIME_FLAGS}" CACHE STRING ""
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${PIC32CLANG_RUNTIME_FLAGS}" CACHE STRING "")
 set(CMAKE_ASM_FLAGS "${CMAKE_ASM_FLAGS} ${PIC32CLANG_RUNTIME_FLAGS}" CACHE STRING "")
 
-# TODO: Try setting the build type on the command line like we do with LLVM. This will let the 
-#       user select the build type along with LLVM.
-# set(CMAKE_BUILD_TYPE RelWithDebInfo CACHE STRING "")
-# set(CMAKE_C_FLAGS_RELWITHDEBINFO "-gline-tables-only -DNDEBUG" CACHE STRING "")
-# set(CMAKE_CXX_FLAGS_RELWITHDEBINFO "-gline-tables-only -DNDEBUG" CACHE STRING "")
-# set(CMAKE_ASM_FLAGS_RELWITHDEBINFO "-gline-tables-only -DNDEBUG" CACHE STRING "")
+# Set optimization and debug options based on the value of CMAKE_BUILD_TYPE. Possible values for
+# that are "Release", "Debug", "RelWithDebInfo", and "MinSizeRel". Set the build type on the
+# command line when using this cmake cache. We use O2 optimizations here because it should be a
+# good balance of size and speed for embedded libraries. CMake will by default use O3 for release
+# builds, but that can make the resulting binary larger than O2.
+set(CMAKE_C_FLAGS_RELEASE "-O2 -DNDEBUG" CACHE STRING "")
+set(CMAKE_CXX_FLAGS_RELEASE"-O2 -DNDEBUG" CACHE STRING "")
+set(CMAKE_ASM_FLAGS_RELEASE "-O2 -DNDEBUG" CACHE STRING "")
+
+set(CMAKE_C_FLAGS_DEBUG "-g" CACHE STRING "")
+set(CMAKE_CXX_FLAGS_DEBUG "-g" CACHE STRING "")
+set(CMAKE_ASM_FLAGS_DEBUG "-g" CACHE STRING "")
+
+set(CMAKE_C_FLAGS_RELWITHDEBINFO "-O2 -gline-tables-only -DNDEBUG" CACHE STRING "")
+set(CMAKE_CXX_FLAGS_RELWITHDEBINFO "-O2 -gline-tables-only -DNDEBUG" CACHE STRING "")
+set(CMAKE_ASM_FLAGS_RELWITHDEBINFO "-O2 -gline-tables-only -DNDEBUG" CACHE STRING "")
+
+set(CMAKE_C_FLAGS_MINSIZEREL "-Oz -DNDEBUG" CACHE STRING "")
+set(CMAKE_CXX_FLAGS_MINSIZEREL "-Oz -DNDEBUG" CACHE STRING "")
+set(CMAKE_ASM_FLAGS_MINSIZEREL "-Oz -DNDEBUG" CACHE STRING "")
+
 
 set(CMAKE_CROSSCOMPILING ON CACHE BOOL "")
 set(CMAKE_SYSROOT "${PIC32CLANG_SYSROOT}" CACHE PATH "")
@@ -197,12 +215,11 @@ set(LIBC_CONF_PRINTF_DISABLE_FIXED_POINT OFF CACHE STRING "")
 set(LIBC_CONF_PRINTF_DISABLE_FLOAT OFF CACHE STRING "")
 set(LIBC_CONF_PRINTF_FLOAT_TO_STR_NO_SPECIALIZE_LD ON CACHE STRING "")
 set(LIBC_CONF_PRINTF_FLOAT_TO_STR_USE_DYADIC_FLOAT ON CACHE STRING "")
-# Enabling this FLOAT320 option will reduce binary size by 10kB but make floating point conversions
-# take about twice as long (~350us vs ~180us in a very basic example).
+# Enabling this FLOAT320 option will reduce binary size by 9kB but make floating point conversions
+# take about twice as long (~350us vs ~180us in a very basic example). This assumes that
+# LIBC_COPT_FLOAT_TO_STR_NO_TABLE is defined in the runtime flags above.
 set(LIBC_CONF_PRINTF_FLOAT_TO_STR_USE_FLOAT320 OFF CACHE STRING "")
 set(LIBC_CONF_PRINTF_FLOAT_TO_STR_USE_MEGA_LONG_DOUBLE_TABLE OFF CACHE STRING "")
-
-# TODO: What happens if we define LIBC_COPT_FLOAT_TO_STR_NO_TABLE ? There is no CMake option for this.
 
 set(LIBC_CONF_SCANF_DISABLE_FLOAT OFF CACHE STRING "")
 set(LIBC_CONF_SCANF_DISABLE_INDEX_MODE ON CACHE STRING "")
