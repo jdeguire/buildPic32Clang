@@ -1,3 +1,5 @@
+**NOTE** This branch is deprecated because it was merged into 'master'. You should use that branch instead.
+
 # buildPic32Clang
 A Python script to build Clang for PIC32 and SAM devices along with any supporting libraries.
 
