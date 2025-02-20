@@ -583,6 +583,7 @@ def build_device_startup_files() -> None:
                 str(Path('../../../bin/clang')),
                 '--config', f'{proc_dir.name}.cfg',
                 '-Os',
+                '-ffunction-sections',
                 '-c',
                 '-o', 'crt0.o',
                 'startup.c'
