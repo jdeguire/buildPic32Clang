@@ -9,35 +9,36 @@ I don't know enough about the Cortex-A parts to set them up properly.
 ## Requirements
 Here's a quick list of what you need.
 
-- Python 3.12 or newer
-- A recent C++ compiler (MSVC, Clang, and GCC should all work)
+- Python 3.10 or newer
+- A recent C++ compiler (MSVC on Windows; Clang or GCC otherwise)
 - CMake
-- GNU Make
 - Ninja
 - Git
+- PyYaml (install with `pip3 install pyyaml`)
 
-On Windows you should use the Windows Terminal app instead of the old command-line interface
-(conhost.exe). This script uses ASCII control codes to provide a running status of what the script
-is doing and the old console does not support those very well. There are Windows installers for all
-of these apps. If you need a compiler, you can use an LLVM release from 
-https://github.com/llvm/llvm-project/releases.
+On Windows you should install and use the Windows Terminal app. This script uses ASCII control codes
+to provide a running status of what the script is doing and the old console does not support those
+very well. There are Windows installers for all of these apps. You will need to add CMake and Ninja
+to your PATH. I cheated and just put `ninja.exe` into the same directory as `cmake.exe`. For a
+compiler, you can go grab the latest Visual Studio Build Tools from https://visualstudio.microsoft.com/downloads/.
+In the installer, select "Desktop development with C++" then on the right side add a checkbox to
+"C++ ATL for latest vNNN build tools".
 
 On Linux distributions, you should be able to get everything you need from your package manager.
 Your Python version might be a little old, but it may still work if it isn't too far behind 3.10.
 Something like Python 3.8 might be okay. If you're using a Debian or similar distribution--say
-Ubuntu or PopOS--you can get the `build-essential` package for a toolchain and probably GNU Make. 
+Ubuntu or PopOS--you can get the `build-essential` package for a toolchain.
 
 Mac OS users are unfortunately on their own since I don't currently own a Mac.
-
-So far, this script has been run only under the Windows Subsytem for Linux (WSL) on Windows 10. The
-intent is for it to also support running on a Windows terminal as well, but that has not yet been
-tested very much.
 
 ## How to Run
 For now, this script can be run by opening up a terminal interface and running `./buildPic32Clang.py`
 (Unix/Linux/WSL/etc.) or `python3 .\buildPic32Clang.py` (Windows). If you supply no arguments when
 running it, a usable set of defaults will be used that will try to clone and build all of the projects
 this script can handle.
+
+On Windows, you will likely need to run this script from either the "Developer Command Prompt for
+VS 20xx" or the "Developer PowerShell for VS 20xx" if you need to build the toolchain.
 
 Here are the command-line arguments you can supply to control how the script runs.
 

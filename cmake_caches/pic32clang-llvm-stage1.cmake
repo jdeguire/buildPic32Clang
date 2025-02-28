@@ -8,10 +8,16 @@
 # includes the example code and so this will follow suit. A copy of the
 # license is provided in LICENSE.txt.
 
-
 # Enable LLVM projects and runtimes
+# The proper variable to check is 'MSVC', but that is not yet checked when this file is parsed.
+# The best we can do is 'WIN32' for now. This check is here because libunwind and libcxxabi
+# are not supported with MSVC.
 set(LLVM_ENABLE_PROJECTS "clang;clang-tools-extra;lld;polly" CACHE STRING "")
-set(LLVM_ENABLE_RUNTIMES "compiler-rt;libunwind;libcxx;libcxxabi" CACHE STRING "")
+if(WIN32)
+  set(LLVM_ENABLE_RUNTIMES "compiler-rt;libcxx" CACHE STRING "")
+else()
+  set(LLVM_ENABLE_RUNTIMES "compiler-rt;libunwind;libcxx;libcxxabi" CACHE STRING "")
+endif()
 
 # Only build the native target in stage1 since it is a throwaway build.
 set(LLVM_TARGETS_TO_BUILD Native CACHE STRING "")

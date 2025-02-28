@@ -278,15 +278,24 @@ def clone_from_git(url: str, branch: str = '', dest_directory: Path | None = Non
     otherwise, the underlying subprocess code will throw a subprocess.CalledProcessError. If 
     full_clone is True, then this will clone the full repo history; otherwise, only a shallow clone
     is made by using the "--depth=1" option.
+
+    To clone a branch and then switch to a particular commit, append a colon and the hash for the
+    desired commit to the branch name. For example, 'foo:123adcdef' will clone branch 'foo' and then
+    switch to commit '123abcdef'.
     '''
     cmd = ['git', 'clone']
+    commit = ''
 
     if not full_clone:
         cmd.append('--depth=1')
 
     if branch:
+        parts = branch.split(':', 1)
         cmd.append('-b')
-        cmd.append(branch)
+        cmd.append(parts[0])
+
+        if len(parts) > 1:
+            commit = parts[1]
 
     if is_windows():
         cmd.append('--config')
@@ -297,14 +306,19 @@ def clone_from_git(url: str, branch: str = '', dest_directory: Path | None = Non
     if dest_directory:
         cmd.append(dest_directory.as_posix())
 
+    if not full_clone  and  commit:
+        raise ValueError('You must perform a full clone to checkout a particular commit')
+
     try:
         run_subprocess(cmd, 'Cloning ' + url)
+
+        if commit:
+            run_subprocess(['git', 'checkout', commit], 'Checking out commit ' + commit)
     except subprocess.CalledProcessError as ex:
         if skip_if_exists  and  'already exists' in ex.output:
             pass
         else:
             raise
-
 
 def clone_selected_repos_from_git(args: argparse.Namespace) -> None:
     '''Clone repos from git based on the build steps and command line arguments to this script.
@@ -574,13 +588,18 @@ def build_device_startup_files() -> None:
     crt0_dir: Path = INSTALL_PREFIX / 'cortex-m' / 'proc'
     failed_devices: list[str] = []
 
+    if is_windows():
+        compiler_path = Path(os.path.abspath(INSTALL_PREFIX / 'bin' / 'clang.exe'))
+    else:
+        compiler_path = Path('../../../bin/clang')
+
     for proc_dir in crt0_dir.iterdir():
         if not proc_dir.is_dir():
             continue
 
         try:
             build_cmd = [
-                str(Path('../../../bin/clang')),
+                compiler_path.as_posix(),
                 '--config', f'{proc_dir.name}.cfg',
                 '-Os',
                 '-ffunction-sections',
