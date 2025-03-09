@@ -49,7 +49,7 @@ Mac OS users are unfortunately on their own since I don't currently own a Mac.
 For now, this script can be run by opening up a terminal interface and running `./buildPic32Clang.py`
 (Unix/Linux/WSL/etc.) or `python3 .\buildPic32Clang.py` (any of those + Windows). On Linux or Unix
 you might need to run `chmod +x ./buildPic32Clang.py` once before you run it for the first time.
-If you supply no  arguments when running it, a usable set of defaults will be used that will try to
+If you supply no arguments when running it, a usable set of defaults will be used that will try to
 clone and build all of the projects this script can handle.
 
 On Windows, you will likely need to run this script from either the "Developer Command Prompt for
