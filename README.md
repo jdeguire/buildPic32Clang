@@ -25,7 +25,8 @@ In the installer, select "Desktop development with C++" then on the right side a
 
 You'll need to install a couple of packages using Python's package manager. You need `pyyaml` and,
 if you want to build docs, `sphinx`. After you install Python run `pip3 install pyyanml sphinx` to
-install both.
+install both. You might see warning about scripts not being in your PATH. I was able to ignore those,
+but you can add the locations to your PATH if you run into issues.
 
 You should install and use the Windows Terminal app. This script uses ASCII control codes to
 provide a running status of what the script is doing and the old console does not support those
