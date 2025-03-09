@@ -124,19 +124,19 @@ def get_lib_build_dir(libname: str, variant: TargetVariant) -> Path:
     The path created depends on the path value in the given variant so that each variant has its own
     build directory.
     '''
-    return BUILD_PREFIX / libname / variant.arch / variant.path
+    return BUILD_PREFIX / libname / variant.series / variant.path
 
 
 def get_lib_install_prefix(variant: TargetVariant) -> Path:
     '''Get a path relative to the working directory from which this script was run that would be
     used as the "prefix" path for installing the libraries.
     '''
-    return INSTALL_PREFIX / variant.arch
+    return INSTALL_PREFIX / variant.series
 
 def get_lib_info_str(variant: TargetVariant) -> str:
     '''Get a string that can be printed to the console to indicate what variant is being built.
     '''
-    return str(variant.arch / variant.path)
+    return str(variant.series / variant.path)
 
 
 def get_lib_build_tool_abspath(args: argparse.Namespace) -> Path:
@@ -488,10 +488,10 @@ def build_llvm_runtimes(args: argparse.Namespace, variant: TargetVariant):
 
     # Testing suggests that the CMake scripts for the runtimes detect the Arm variant (ie. armv6m)
     # from the triple rather than from the separate '-march=' option.
-    if variant.arch.startswith('mips'):
+    if variant.series.startswith('mips'):
         triple_str = variant.triple
     else:
-        triple_str = variant.subarch + '-none-eabi'
+        triple_str = variant.arch + '-none-eabi'
 
     # TODO: The CMake script for the runtimes excludes the built-in atomics support because it fails
     #       with Armv6-m. It does not support the Arm atomic access instructions. Could we enable
