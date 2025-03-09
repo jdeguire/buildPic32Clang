@@ -216,6 +216,7 @@ set(LIBC_TARGET_TRIPLE ${PIC32CLANG_TARGET_TRIPLE} CACHE STRING "")
 # for addittional explanations for these. 
 # TODO: Figure out how to make errno thread-local now that we support thread-local storage.
 #       Currently we provide a callback function to get a global errno. This is in the startup code.
+# TODO: How many libc options like these can be moved into the JSON config file?
 set(LIBC_CONF_PRINTF_DISABLE_INDEX_MODE ON CACHE STRING "")
 set(LIBC_CONF_PRINTF_DISABLE_STRERROR ON CACHE STRING "")
 set(LIBC_CONF_PRINTF_DISABLE_WRITE_INT ON CACHE STRING "")
@@ -270,6 +271,7 @@ set(LIBCXX_ENABLE_MONOTONIC_CLOCK OFF CACHE BOOL "")
 set(LIBCXX_ENABLE_THREADS OFF CACHE BOOL "")
 set(LIBCXX_HAS_PTHREAD_API OFF CACHE BOOL "")
 # We need to disable wide character support because LLVM-libc does not yet support wchar stuff.
+# TODO: Revisit these next two when we get our custom configuration going.
 set(LIBCXX_ENABLE_WIDE_CHARACTERS OFF CACHE BOOL "")
 # LLVM-libc does not include locale stuff in the baremetal build. This ends up disabling a lot of
 # the stream interface, but we avoid those on embedded anyway.

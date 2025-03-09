@@ -74,10 +74,12 @@ ROOT_WORKING_DIR = Path('./pic32clang')
 BUILD_PREFIX = ROOT_WORKING_DIR / 'build'
 INSTALL_PREFIX = ROOT_WORKING_DIR / 'install'
 
-CMAKE_CACHE_DIR = Path(os.path.dirname(os.path.realpath(__file__)), 'cmake_caches')
+THIS_FILE_DIR = Path(os.path.dirname(os.path.realpath(__file__)))
+CMAKE_CACHE_DIR = THIS_FILE_DIR / 'cmake_caches'
+LIBC_CONFIG_DIR = THIS_FILE_DIR / 'llvm_libc_config'
 
 LLVM_REPO_URL = 'https://github.com/llvm/llvm-project.git'
-LLVM_REPO_BRANCH = 'llvmorg-19.1.5'
+LLVM_REPO_BRANCH = 'llvmorg-20.1.0'
 LLVM_SRC_DIR = ROOT_WORKING_DIR / 'llvm'
 
 PIC32_FILE_MAKER_REPO_URL = 'https://github.com/jdeguire/pic32-device-file-maker.git'
@@ -348,6 +350,7 @@ def build_single_stage_llvm(args: argparse.Namespace) -> None:
 
     remake_dirs(build_dir)
 
+    # TODO: Can I use the stage2 cmake cache for this?
     gen_cmd = [
         'cmake', '-G', 'Ninja',
         f'-DCMAKE_INSTALL_PREFIX={install_dir.as_posix()}',
@@ -358,7 +361,7 @@ def build_single_stage_llvm(args: argparse.Namespace) -> None:
         '-DCLANG_CONFIG_FILE_SYSTEM_DIR=../config',
         '-DLLVM_OPTIMIZED_TABLEGEN=ON',
         '-DLLVM_USE_SPLIT_DWARF=ON',
-        '-DLLVM_TARGETS_TO_BUILD=ARM;Mips',
+        '-DLLVM_TARGETS_TO_BUILD=host;ARM;Mips',
         '-DLLVM_ENABLE_PROJECTS=clang;clang-tools-extra;lld;lldb;polly',
         src_dir.as_posix()
     ]
@@ -462,9 +465,9 @@ def add_stdio_file_decls() -> None:
 def build_llvm_runtimes(args: argparse.Namespace, variant: TargetVariant):
     '''Build LLVM runtime libraries for a single build variant.
 
-    Build libc++, libc++abi, libunwind, and Compiler-RT for the given build variant using its build
-    options. The build and install paths of the libraries are determined by the path provided by the
-    variant. This needs to be called after LLVM has been built.
+    Build libc, libc++, libc++abi, libunwind, and Compiler-RT for the given build variant using its
+    build options. The build and install paths of the libraries are determined by the path provided
+    by the variant. This needs to be called after LLVM has been built.
     '''
     build_dir = get_lib_build_dir('runtimes', variant)
     prefix = get_lib_install_prefix(variant)
@@ -474,6 +477,12 @@ def build_llvm_runtimes(args: argparse.Namespace, variant: TargetVariant):
     clang_sysroot = get_lib_build_tool_abspath(args)
     cmake_config_path = Path(os.path.relpath(CMAKE_CACHE_DIR / 'pic32clang-target-runtimes.cmake',
                                              build_dir))
+    libc_config_path = LIBC_CONFIG_DIR / 'arm'
+
+    # This suffix goes up a level because the LLVM CMake scripts add an extra '/lib/' we don't want.
+    # These paths match the ones in our multilib.yaml file. That is generated as part of the 'devfiles'
+    # step. We add '/lib' to the end because LLVM does after parsing multilib.yaml.
+    libdir_suffix = Path(f'../{variant.path.as_posix()}/lib')
 
     remake_dirs(build_dir)
 
@@ -492,8 +501,8 @@ def build_llvm_runtimes(args: argparse.Namespace, variant: TargetVariant):
         'cmake', '-G', 'Ninja', 
         f'-DCMAKE_INSTALL_PREFIX={prefix_dir.as_posix()}',
         f'-DCMAKE_BUILD_TYPE={args.llvm_build_type}',
-        # This suffix goes up a level because the LLVM CMake scripts add an extra '/lib/' we don't want.
-        f'-DPIC32CLANG_LIBDIR_SUFFIX=../{variant.path.as_posix()}/lib',
+        f'-DLIBC_CONFIG_PATH={libc_config_path.as_posix()}',
+        f'-DPIC32CLANG_LIBDIR_SUFFIX={libdir_suffix.as_posix()}',
         f'-DPIC32CLANG_TARGET_TRIPLE={triple_str}',
         f'-DPIC32CLANG_RUNTIME_FLAGS={options_str}',
         f'-DPIC32CLANG_SYSROOT={clang_sysroot.as_posix()}',
@@ -504,9 +513,6 @@ def build_llvm_runtimes(args: argparse.Namespace, variant: TargetVariant):
     ]
     gen_build_info = f'Generate runtimes build script ({get_lib_info_str(variant)})'
     run_subprocess(gen_cmd, gen_build_info, build_dir)
-
-    # TODO: We might be able to provide our own configuration to tell libc to include file IO, wchar,
-    #       and other stuff. Look at LIBC_CONFIG_PATH.
 
     run_subprocess(['cmake', '--build', '.', '--target', 'install-compiler-rt'],
                    f'Build/Install Compiler-RT ({get_lib_info_str(variant)})',
@@ -537,17 +543,26 @@ def build_llvm_runtimes(args: argparse.Namespace, variant: TargetVariant):
     # TODO: Armv8.1m.main targets with MVE are missing these files. Did we mess up or did the build?
     compiler_rt_path = prefix / variant.path / 'lib'
     for crt in compiler_rt_path.iterdir():
-        if crt.name.startswith('libclang_rt.'):
-            subname = crt.stem[12:].split('-', 1)
-            crt.rename(crt.parent / f'libclang_rt.{subname[0]}{crt.suffix}')
-        elif crt.name.startswith('clang_rt.'):
-            subname = crt.stem[9:].split('-', 1)
-            crt.rename(crt.parent / f'clang_rt.{subname[0]}{crt.suffix}')
+        if '-' in crt.name:
+            if crt.name.startswith('libclang_rt.'):
+                subname = crt.stem[12:].split('-', 1)
+                new_path = crt.parent / f'libclang_rt.{subname[0]}{crt.suffix}'
+                
+                new_path.unlink(missing_ok=True)    
+                crt.rename(new_path)
+            elif crt.name.startswith('clang_rt.'):
+                subname = crt.stem[9:].split('-', 1)
+                new_path = crt.parent / f'clang_rt.{subname[0]}{crt.suffix}'
+
+                new_path.unlink(missing_ok=True)    
+                crt.rename(new_path)
 
     # LLVM-libc puts the outputs into a per-target directory. We already handle this, so move the
     # libc files up a level to be with the rest of the libraries.
     libc_path = prefix / variant.path / 'lib' / triple_str
     for libc in libc_path.iterdir():
+        new_path = libc.parent.parent / libc.name
+        new_path.unlink(missing_ok=True)
         libc.rename(libc.parent.parent / libc.name)
     libc_path.rmdir()
 
@@ -814,6 +829,13 @@ def print_arg_info(args: argparse.Namespace) -> None:
 # This is true when this file is executed as a script rather than imported into another file. We
 # probably don't need this, but there's no harm in checking.
 if '__main__' == __name__:
+    if ' ' in str(THIS_FILE_DIR):
+        print('This script cannot be run from a path with spaces in it.')
+        print('Doing so will mess up some paths that get passed to CMake.')
+        print('Run this script from a path with no spaces.')
+        exit(0)
+
+
     # The Windows Terminal (the one with tabs) supports ANSI escape codes, but the old console
     # (conhost.exe) does not unless the following weird workaround is done. This came from
     # https://bugs.python.org/issue30075.

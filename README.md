@@ -38,7 +38,13 @@ running it, a usable set of defaults will be used that will try to clone and bui
 this script can handle.
 
 On Windows, you will likely need to run this script from either the "Developer Command Prompt for
-VS 20xx" or the "Developer PowerShell for VS 20xx" if you need to build the toolchain.
+VS 20xx" or the "Developer PowerShell for VS 20xx" if you need to build the toolchain. Do not run
+this script from a long path. If you get error code RC1109 from `rc.exe` when building LLVM, then
+you need to move the script to a location with a shorter path.
+
+Do not run this script from a path with space in it. Doing so can mess up paths provided to CMake,
+so this script will check for that and tell you to move it if the path has spaces. I tried to use
+relative paths where possible to avoid this, but there are a few places I couldn't figure out.
 
 Here are the command-line arguments you can supply to control how the script runs.
 
