@@ -117,43 +117,22 @@ def get_cmake_bool(sel: bool) -> str:
     return 'ON' if sel else 'OFF'
 
 
-def get_lib_build_dir(libname: str, variant: TargetVariant) -> Path:
-    '''Get a path relative to the working directory from which this script was run at which a
-    library build will be performed.
-
-    The path created depends on the path value in the given variant so that each variant has its own
-    build directory.
-    '''
-    return BUILD_PREFIX / libname / variant.series / variant.path
-
-
-def get_lib_install_prefix(variant: TargetVariant) -> Path:
-    '''Get a path relative to the working directory from which this script was run that would be
-    used as the "prefix" path for installing the libraries.
-    '''
-    return INSTALL_PREFIX / variant.series
-
-def get_lib_info_str(variant: TargetVariant) -> str:
-    '''Get a string that can be printed to the console to indicate what variant is being built.
-    '''
-    return str(variant.series / variant.path)
-
-
-def get_lib_build_tool_abspath(args: argparse.Namespace) -> Path:
+def get_built_toolchain_abspath() -> Path:
     '''Get the absolute path to the just-built LLVM/Clang toolchain so it can be used to build
     the libraries.
 
     This returns the top-level directory for the toolchain--that is, the path at which the bin/,
-    lib/, and so on directories are located. This will use the stage 2 build location if able because
-    the LLVM libraries make use of CMake caches and other build items in that location rather than 
-    the final install location.
+    lib/, and so on directories are located. This will use the build location  because the LLVM
+    libraries make use of CMake caches and other build items in that location rather than the
+    final install location.
     '''
-    if args.single_stage:
-        libpath = BUILD_PREFIX / 'llvm'
-    else:
-        libpath = BUILD_PREFIX / 'llvm' / 'tools' / 'clang' / 'stage2-bins'
+    stage2_path = BUILD_PREFIX / 'llvm' / 'tools' / 'clang' / 'stage2-bins'
+    single_stage_path = BUILD_PREFIX / 'llvm'
 
-    return libpath.absolute()
+    if stage2_path.exists():
+        return stage2_path.absolute()
+    else:
+        return single_stage_path.absolute()
 
 
 def remake_dirs(dir: Path) -> None:
@@ -315,7 +294,9 @@ def clone_from_git(url: str, branch: str = '', dest_directory: Path | None = Non
         run_subprocess(cmd, 'Cloning ' + url)
 
         if commit:
-            run_subprocess(['git', 'checkout', commit], 'Checking out commit ' + commit)
+            run_subprocess(['git', 'checkout', commit],
+                           'Checking out commit ' + commit,
+                           dest_directory)
     except subprocess.CalledProcessError as ex:
         if skip_if_exists  and  'already exists' in ex.output:
             pass
@@ -347,10 +328,11 @@ def build_single_stage_llvm(args: argparse.Namespace) -> None:
     build_dir = BUILD_PREFIX / 'llvm'
     install_dir = Path(os.path.relpath(INSTALL_PREFIX, build_dir))
     src_dir = Path(os.path.relpath(LLVM_SRC_DIR / 'llvm', build_dir))
+    cmake_config_path = Path(os.path.relpath(CMAKE_CACHE_DIR / 'pic32clang-llvm-stage2.cmake',
+                                             build_dir))
 
     remake_dirs(build_dir)
 
-    # TODO: Can I use the stage2 cmake cache for this?
     gen_cmd = [
         'cmake', '-G', 'Ninja',
         f'-DCMAKE_INSTALL_PREFIX={install_dir.as_posix()}',
@@ -358,11 +340,7 @@ def build_single_stage_llvm(args: argparse.Namespace) -> None:
         f'-DLLVM_ENABLE_LTO={get_cmake_bool(args.enable_lto)}',
         f'-DLLVM_PARALLEL_COMPILE_JOBS={args.compile_jobs}',
         f'-DLLVM_PARALLEL_LINK_JOBS={args.link_jobs}',
-        '-DCLANG_CONFIG_FILE_SYSTEM_DIR=../config',
-        '-DLLVM_OPTIMIZED_TABLEGEN=ON',
-        '-DLLVM_USE_SPLIT_DWARF=ON',
-        '-DLLVM_TARGETS_TO_BUILD=host;ARM;Mips',
-        '-DLLVM_ENABLE_PROJECTS=clang;clang-tools-extra;lld;lldb;polly',
+        '-C', cmake_config_path.as_posix(),
         src_dir.as_posix()
     ]
     run_subprocess(gen_cmd, 'Generate LLVM build script', build_dir)
@@ -469,22 +447,20 @@ def build_llvm_runtimes(args: argparse.Namespace, variant: TargetVariant):
     build options. The build and install paths of the libraries are determined by the path provided
     by the variant. This needs to be called after LLVM has been built.
     '''
-    build_dir = get_lib_build_dir('runtimes', variant)
-    prefix = get_lib_install_prefix(variant)
+    build_dir = BUILD_PREFIX / 'runtimes' / variant.series / variant.path
+    prefix = INSTALL_PREFIX / variant.series
     prefix_dir = Path(os.path.relpath(prefix, build_dir))
     src_dir = Path(os.path.relpath(LLVM_SRC_DIR / 'runtimes', build_dir))
 
-    clang_sysroot = get_lib_build_tool_abspath(args)
+    clang_sysroot = get_built_toolchain_abspath()
     cmake_config_path = Path(os.path.relpath(CMAKE_CACHE_DIR / 'pic32clang-target-runtimes.cmake',
                                              build_dir))
     libc_config_path = LIBC_CONFIG_DIR / 'arm'
 
     # This suffix goes up a level because the LLVM CMake scripts add an extra '/lib/' we don't want.
-    # These paths match the ones in our multilib.yaml file. That is generated as part of the 'devfiles'
-    # step. We add '/lib' to the end because LLVM does after parsing multilib.yaml.
+    # These paths match the ones in our multilib.yaml file generated as part of the 'devfiles' step.
+    # We add '/lib' to the end because LLVM adds that to the path in multilib.yaml.
     libdir_suffix = Path(f'../{variant.path.as_posix()}/lib')
-
-    remake_dirs(build_dir)
 
     # Testing suggests that the CMake scripts for the runtimes detect the Arm variant (ie. armv6m)
     # from the triple rather than from the separate '-march=' option.
@@ -492,6 +468,8 @@ def build_llvm_runtimes(args: argparse.Namespace, variant: TargetVariant):
         triple_str = variant.triple
     else:
         triple_str = variant.arch + '-none-eabi'
+
+    remake_dirs(build_dir)
 
     # TODO: The CMake script for the runtimes excludes the built-in atomics support because it fails
     #       with Armv6-m. It does not support the Arm atomic access instructions. Could we enable
@@ -511,29 +489,32 @@ def build_llvm_runtimes(args: argparse.Namespace, variant: TargetVariant):
         '-C', cmake_config_path.as_posix(),
         src_dir.as_posix()
     ]
-    gen_build_info = f'Generate runtimes build script ({get_lib_info_str(variant)})'
-    run_subprocess(gen_cmd, gen_build_info, build_dir)
+    which_variant_str = Path(variant.series / variant.path).as_posix()
+
+    run_subprocess(gen_cmd,
+                   f'Generate runtimes build script ({which_variant_str})',
+                   build_dir)
 
     run_subprocess(['cmake', '--build', '.', '--target', 'install-compiler-rt'],
-                   f'Build/Install Compiler-RT ({get_lib_info_str(variant)})',
+                   f'Build/Install Compiler-RT ({which_variant_str})',
                    build_dir)
 
     run_subprocess(['cmake', '--build', '.', '--target', 'install-libc'],
-                   f'Build/Install LLVM-libc ({get_lib_info_str(variant)})',
+                   f'Build/Install LLVM-libc ({which_variant_str})',
                    build_dir)
 
     add_stdio_file_decls()
 
     run_subprocess(['cmake', '--build', '.', '--target', 'install-unwind'],
-                   f'Build/Install libcxxabi ({get_lib_info_str(variant)})',
+                   f'Build/Install libcxxabi ({which_variant_str})',
                    build_dir)
 
     run_subprocess(['cmake', '--build', '.', '--target', 'install-cxxabi'],
-                   f'Build/Install libcxxabi ({get_lib_info_str(variant)})',
+                   f'Build/Install libcxxabi ({which_variant_str})',
                    build_dir)
 
     run_subprocess(['cmake', '--build', '.', '--target', 'install-cxx'],
-                   f'Build/Install libcxx ({get_lib_info_str(variant)})',
+                   f'Build/Install libcxx ({which_variant_str})',
                    build_dir)
 
     # Compiler-RT is built to include the arch name in the library name unless we let CMake decide
@@ -829,10 +810,9 @@ def print_arg_info(args: argparse.Namespace) -> None:
 # This is true when this file is executed as a script rather than imported into another file. We
 # probably don't need this, but there's no harm in checking.
 if '__main__' == __name__:
-    if ' ' in str(THIS_FILE_DIR):
-        print('This script cannot be run from a path with spaces in it.')
-        print('Doing so will mess up some paths that get passed to CMake.')
-        print('Run this script from a path with no spaces.')
+    if ' ' in str(THIS_FILE_DIR)  or  ' ' in str(Path('.').absolute()):
+        print('Either this script is located in a path with a space in it or your current')
+        print('working directory has a space. This script currently cannot handle that.')
         exit(0)
 
 
@@ -856,9 +836,8 @@ if '__main__' == __name__:
         else:
             build_two_stage_llvm(args)
 
-    build_variants: list[TargetVariant] = pic32_target_variants.create_build_variants()
-
     if 'runtimes' in args.steps:
+        build_variants: list[TargetVariant] = pic32_target_variants.create_build_variants()
         for variant in build_variants:
             build_llvm_runtimes(args, variant)
 
