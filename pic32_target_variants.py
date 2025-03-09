@@ -54,6 +54,8 @@ from pathlib import Path
 # -- microMIPS + FPU is commented out for now because Clang/LLVM can crash when trying to use it.
 # -- The M0, M0+, M23, and M3 do not have an FPU.
 # -- The M4 has a 32-bit FPU; the M7 has a 64-bit FPU. These are Armv7em.
+# -- Devices with MVE (M-profile Vector Extensions) use the hard float ABI even if they do not have
+#    a normal FPU. MVE registers are remapped FPU registers.
 # -- The A5 can have either a normal 64-bit FPU or one with NEON. This is Armv7a.
 # -- The M series is always Thumb, so we do not have to differentiate.
 @dataclass(frozen=True)
@@ -77,8 +79,9 @@ class Mips32Variant(TargetVariant):
 @dataclass(frozen=True)
 class CortexMVariant(TargetVariant):
     def __init__(self, multilib_path: Path, subarch: str, options: list[str]) -> None:
-        # The '-mimplicit-it' flag is needed for Musl. Whatever options I'm passing are causing the
-        # Musl configure script to not pick that up automatically.
+        # The '-mimplicit-it' flag was needed for Musl. Whatever options I used for Musl caused its
+        # configure script to not pick that up automatically.
+        # TODO: This may not be needed anymore since we are no longer using Musl.
         common_opts = ['-target', 'arm-none-eabi', '-mimplicit-it=always', '-fomit-frame-pointer']
         all_opts = common_opts + options
 
@@ -87,8 +90,9 @@ class CortexMVariant(TargetVariant):
 @dataclass(frozen=True)
 class CortexAVariant(TargetVariant):
     def __init__(self, multilib_path: Path, subarch: str, options: list[str]) -> None:
-        # The '-mimplicit-it' flag is needed for Musl. Whatever options I'm passing are causing the
-        # Musl configure script to not pick that up automatically.
+        # The '-mimplicit-it' flag was needed for Musl. Whatever options I used for Musl caused its
+        # configure script to not pick that up automatically.
+        # TODO: This may not be needed anymore since we are no longer using Musl.
         common_opts = ['-target', 'arm-none-eabi', '-mimplicit-it=always', '-fomit-frame-pointer']
         all_opts = common_opts + options
 
@@ -130,39 +134,39 @@ TARGETS: list[TargetVariant] = [
     CortexMVariant(Path('v6m/nofp'),
                    'armv6m',
                    ['-march=armv6m', '-mfpu=none', '-mfloat-abi=soft']),
-    CortexMVariant(Path('v7m/nofp'),
-                   'armv7m',
-                   ['-march=armv7m', '-mfpu=none', '-mfloat-abi=soft']),
-    CortexMVariant(Path('v7em/nofp'),
-                   'armv7em',
-                   ['-march=armv7em', '-mfpu=none', '-mfloat-abi=soft']),
-    CortexMVariant(Path('v7em/fpv4-sp-d16'),
-                   'armv7em',
-                   ['-march=armv7em', '-mfpu=fpv4-sp-d16', '-mfloat-abi=hard']),
+    # CortexMVariant(Path('v7m/nofp'),
+    #                'armv7m',
+    #                ['-march=armv7m', '-mfpu=none', '-mfloat-abi=soft']),
+    # CortexMVariant(Path('v7em/nofp'),
+    #                'armv7em',
+    #                ['-march=armv7em', '-mfpu=none', '-mfloat-abi=soft']),
+    # CortexMVariant(Path('v7em/fpv4-sp-d16'),
+    #                'armv7em',
+    #                ['-march=armv7em', '-mfpu=fpv4-sp-d16', '-mfloat-abi=hard']),
     CortexMVariant(Path('v7em/fpv5-d16'),
                    'armv7em',
                    ['-march=armv7em', '-mfpu=fpv5-d16', '-mfloat-abi=hard']),
-    CortexMVariant(Path('v8m.base/nofp'),
-                   'armv8m.base',
-                   ['-march=armv8m.base', '-mfpu=none', '-mfloat-abi=soft']),
-    CortexMVariant(Path('v8m.main/nofp'),
-                   'armv8m.main',
-                   ['-march=armv8m.main', '-mfpu=none', '-mfloat-abi=soft']),
-    CortexMVariant(Path('v8m.main/fpv5-sp-d16'),
-                   'armv8m.main',
-                   ['-march=armv8m.main', '-mfpu=fpv5-sp-d16', '-mfloat-abi=hard']),
-    CortexMVariant(Path('v8.1m.main/nofp/nomve'),
-                   'armv8.1m.main',
-                   ['-march=armv8.1m.main', '-mfpu=none', '-mfloat-abi=soft']),
-    CortexMVariant(Path('v8.1m.main/nofp/mve'),
-                   'armv8.1m.main+mve',
-                   ['-march=armv8.1m.main+mve', '-mfpu=none', '-mfloat-abi=hard']), # MVE needs hard ABI
-    CortexMVariant(Path('v8.1m.main/fp-armv8-fullfp16-d16/nomve'),
-                   'armv8.1m.main',
-                   ['-march=armv8.1m.main', '-mfpu=fp-armv8-fullfp16-d16', '-mfloat-abi=hard']),
-    CortexMVariant(Path('v8.1m.main/fp-armv8-fullfp16-d16/mve'),
-                   'armv8.1m.main+mve.fp+fp.dp',
-                   ['-march=armv8.1m.main+mve.fp+fp.dp', '-mfpu=fp-armv8-fullfp16-d16', '-mfloat-abi=hard']),
+    # CortexMVariant(Path('v8m.base/nofp'),
+    #                'armv8m.base',
+    #                ['-march=armv8m.base', '-mfpu=none', '-mfloat-abi=soft']),
+    # CortexMVariant(Path('v8m.main/nofp'),
+    #                'armv8m.main',
+    #                ['-march=armv8m.main', '-mfpu=none', '-mfloat-abi=soft']),
+    # CortexMVariant(Path('v8m.main/fpv5-sp-d16'),
+    #                'armv8m.main',
+    #                ['-march=armv8m.main', '-mfpu=fpv5-sp-d16', '-mfloat-abi=hard']),
+    # CortexMVariant(Path('v8.1m.main/nofp/nomve'),
+    #                'armv8.1m.main',
+    #                ['-march=armv8.1m.main', '-mfpu=none', '-mfloat-abi=soft']),
+    # CortexMVariant(Path('v8.1m.main/nofp/mve'),
+    #                'armv8.1m.main+mve',
+    #                ['-march=armv8.1m.main+mve', '-mfpu=none', '-mfloat-abi=hard']), # MVE needs hard ABI
+    # CortexMVariant(Path('v8.1m.main/fp-armv8-fullfp16-d16/nomve'),
+    #                'armv8.1m.main',
+    #                ['-march=armv8.1m.main', '-mfpu=fp-armv8-fullfp16-d16', '-mfloat-abi=hard']),
+    # CortexMVariant(Path('v8.1m.main/fp-armv8-fullfp16-d16/mve'),
+    #                'armv8.1m.main+mve.fp+fp.dp',
+    #                ['-march=armv8.1m.main+mve.fp+fp.dp', '-mfpu=fp-armv8-fullfp16-d16', '-mfloat-abi=hard']),
 
     # CortexAVariant(Path('v7a/nofp'),
     #                'armv7a',
@@ -214,4 +218,5 @@ def create_build_variants() -> list[TargetVariant]:
 
     # return variants
 
+    print("****BUILDING REDUCED VARIANTS FOR DEBUGGING****")
     return TARGETS
