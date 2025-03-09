@@ -6,6 +6,7 @@ devices. MIPS and Cortex-A devices could be added in the future, but I don't hav
 plans for that. MIPS is basically dead (even MIPS the company designs only RISC-V chips now) and
 I don't know enough about the Cortex-A parts to set them up properly.
 
+
 ## Requirements
 Here's a quick list of what you need.
 
@@ -14,22 +15,35 @@ Here's a quick list of what you need.
 - CMake
 - Ninja
 - Git
-- PyYaml (install with `pip3 install pyyaml`)
 
-On Windows you should install and use the Windows Terminal app. This script uses ASCII control codes
-to provide a running status of what the script is doing and the old console does not support those
-very well. There are Windows installers for all of these apps. You will need to add CMake and Ninja
+### Windows
+You can find installers for all of the above apps for Windows. You will need to add CMake and Ninja
 to your PATH. I cheated and just put `ninja.exe` into the same directory as `cmake.exe`. For a
 compiler, you can go grab the latest Visual Studio Build Tools from https://visualstudio.microsoft.com/downloads/.
 In the installer, select "Desktop development with C++" then on the right side add a checkbox to
 "C++ ATL for latest vNNN build tools".
 
+You'll need to install a couple of packages using Python's package manager. You need `pyyaml` and,
+if you want to build docs, `sphinx`. After you install Python run `pip3 install pyyanml sphinx` to
+install both.
+
+You should install and use the Windows Terminal app. This script uses ASCII control codes to
+provide a running status of what the script is doing and the old console does not support those
+very well. This should still run in the old console app, but the output might look off.
+
+### Linux
 On Linux distributions, you should be able to get everything you need from your package manager.
 Your Python version might be a little old, but it may still work if it isn't too far behind 3.10.
 Something like Python 3.8 might be okay. If you're using a Debian or similar distribution--say
 Ubuntu or PopOS--you can get the `build-essential` package for a toolchain.
 
+Python packages might also be avaiable from your package manager. The package names may vary from
+distro to distro, but on Ubuntu you need the `python3-tk`, `python3-yaml`, and `python3-sphinx` if
+you want to build docs. On some distros, the packages might start with `python` instead of `python3`.
+
+### Mac OS
 Mac OS users are unfortunately on their own since I don't currently own a Mac.
+
 
 ## How to Run
 For now, this script can be run by opening up a terminal interface and running `./buildPic32Clang.py`
@@ -134,6 +148,7 @@ but I have not worked on it for a long time and it is basically deprecated at th
 find it at https://github.com/jdeguire/toolchainPic32Clang if you want to play around with it. My
 intent is to figure out how to integrate this with the MPLAB VS Code Extensions, which at this time
 is in early beta but is slated to replace MPLAB X.
+
 
 ## License
 See the LICENSE file for the full thing, but basically this is licensed using the BSD 3-clause
