@@ -452,7 +452,7 @@ def build_llvm_runtimes(args: argparse.Namespace, variant: TargetVariant):
     prefix_dir = Path(os.path.relpath(prefix, build_dir))
     src_dir = Path(os.path.relpath(LLVM_SRC_DIR / 'runtimes', build_dir))
 
-    clang_sysroot = get_built_toolchain_abspath()
+    toolchain_path = get_built_toolchain_abspath()
     cmake_config_path = Path(os.path.relpath(CMAKE_CACHE_DIR / 'pic32clang-target-runtimes.cmake',
                                              build_dir))
     libc_config_path = LIBC_CONFIG_DIR / 'arm'
@@ -483,7 +483,7 @@ def build_llvm_runtimes(args: argparse.Namespace, variant: TargetVariant):
         f'-DPIC32CLANG_LIBDIR_SUFFIX={libdir_suffix.as_posix()}',
         f'-DPIC32CLANG_TARGET_TRIPLE={triple_str}',
         f'-DPIC32CLANG_RUNTIME_FLAGS={options_str}',
-        f'-DPIC32CLANG_SYSROOT={clang_sysroot.as_posix()}',
+        f'-DPIC32CLANG_SYSROOT={toolchain_path.as_posix()}',
         f'-DLLVM_PARALLEL_COMPILE_JOBS={args.compile_jobs}',
         f'-DLLVM_PARALLEL_LINK_JOBS={args.link_jobs}',
         '-C', cmake_config_path.as_posix(),

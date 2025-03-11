@@ -35,6 +35,7 @@ set(PIC32CLANG_RUNTIME_FLAGS "" CACHE STRING "Compiler flags for building the ru
 # CMake files that are needed by the runtime build. Find it at 
 # "<build-prefix>/llvm/tools/clang/stage2-bins".
 # TODO: Maybe change this from SYSROOT to something else because sysroot might mean something else.
+#       Maybe TOOLCHAIN_PATH or something.
 set(PIC32CLANG_SYSROOT "" CACHE PATH "The root of the compiler that will build the runtimes")
 
 # Use this to add a suffix to the location at which the libraries will be installed. This is used by
@@ -75,6 +76,7 @@ list(APPEND PIC32CLANG_RUNTIME_FLAGS
     # This is already defined by libc++ since we are using LLVM-libc.
     #-D_LIBCPP_HAS_TIMESPEC_GET
     -D_LIBCPP_HAS_C11_FEATURES
+    -D_LIBCPP_PROVIDES_DEFAULT_RUNE_TABLE
     # The Libc build turns warning into errors and this prevents such an error from
     # showing up an v6m targets. They do not support the ARM atomic instructions.
     -Wno-atomic-alignment
@@ -203,7 +205,7 @@ set(LIBUNWIND_ENABLE_ASSERTIONS OFF CACHE BOOL "")
 # LLVM-libc
 #
 # TODO: Do we want to include Scudo? It's a more secure memory allocator. If so, there are a few
-#       Compiler-RT options above related to Scudo.
+#       Compiler-RT options above related to Scudo. This might not be supported on baremetal.
 set(LLVM_LIBC_FULL_BUILD ON CACHE BOOL "")
 set(LLVM_LIBC_INCLUDE_SCUDO OFF CACHE BOOL "")
 set(LIBC_TARGET_TRIPLE ${PIC32CLANG_TARGET_TRIPLE} CACHE STRING "")
@@ -236,7 +238,6 @@ set(LIBC_CONF_SCANF_DISABLE_INDEX_MODE ON CACHE STRING "")
 # -----
 # Libc++
 #
-# set(LIBCXX_HAS_MUSL_LIBC ON CACHE BOOL "")
 set(LIBCXX_ENABLE_STATIC ON CACHE BOOL "")
 set(LIBCXX_ENABLE_SHARED OFF CACHE BOOL "")
 set(LIBCXX_ENABLE_EXPERIMENTAL_LIBRARY ON CACHE BOOL "")
@@ -270,11 +271,12 @@ set(LIBCXX_USE_LLVM_UNWINDER ON CACHE BOOL "")
 set(LIBCXX_ENABLE_MONOTONIC_CLOCK OFF CACHE BOOL "")
 set(LIBCXX_ENABLE_THREADS OFF CACHE BOOL "")
 set(LIBCXX_HAS_PTHREAD_API OFF CACHE BOOL "")
-# We need to disable wide character support because LLVM-libc does not yet support wchar stuff.
-# TODO: Revisit these next two when we get our custom configuration going.
+# We need to disable wide character support because LLVM-libc has very few wchar functions
+# implemented at this time. We can revisit this in the future.
 set(LIBCXX_ENABLE_WIDE_CHARACTERS OFF CACHE BOOL "")
-# LLVM-libc does not include locale stuff in the baremetal build. This ends up disabling a lot of
-# the stream interface, but we avoid those on embedded anyway.
+# LLVM-libc recently included locale stuff in the baremetal build, but libc++ expects to be able to
+# use C file IO functions, which we do not yet have on baremetal libc. This ends up disabling a lot
+# of the stream interface, but we avoid those on embedded anyway.
 set(LIBCXX_ENABLE_LOCALIZATION OFF CACHE BOOL "")
 # TODO: Turn this off for now but revisit it in the future. I'm not sure what it does.
 #       Really, anything in embedded would be a terminal, but maybe we want this off if

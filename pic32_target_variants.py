@@ -50,8 +50,7 @@ from pathlib import Path
 # -- The previous note implies that all MIPS32r5 devices have the DSPr2 extension.
 # -- Only the PIC32MX series uses the older MIPS16 extension; none of them have an FPU or DSP ASE.
 # -- It's not clear if Clang/LLVM cares about r2 vs r5 (it might only care about r6 vs rest).
-# -- MIPS16 is commented out for now because Clang/LLVM can crash when trying to use it.
-# -- microMIPS + FPU is commented out for now because Clang/LLVM can crash when trying to use it.
+# -- MIPS16 is commented out for now because LLVM does not properly support MIPS16.
 # -- The M0, M0+, M23, and M3 do not have an FPU.
 # -- The M4 has a 32-bit FPU; the M7 has a 64-bit FPU. These are Armv7em.
 # -- Devices with MVE (M-profile Vector Extensions) use the hard float ABI even if they do not have
