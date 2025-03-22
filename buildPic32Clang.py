@@ -410,6 +410,7 @@ def add_stdio_file_decls() -> None:
 
     # Now, check if the file has already been updated. For now, we'll just look for one file IO
     # function declaration and assume we already updated the file if we see it.
+    # TODO: Check for each declaration in case a future version adds some file IO but not all.
     for line_no, line_str in enumerate(stdio_list):
         if 'vfprintf' in line_str:
             # Found this, so assume file was already updated.
