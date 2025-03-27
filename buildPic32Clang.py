@@ -548,6 +548,7 @@ def build_llvm_runtimes(args: argparse.Namespace, variant: TargetVariant):
         libc.rename(libc.parent.parent / libc.name)
     libc_path.rmdir()
 
+
 def build_device_files(args: argparse.Namespace) -> None:
     '''Build the device-specific files like headers file and linker scripts.
     '''

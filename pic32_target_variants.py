@@ -133,39 +133,39 @@ TARGETS: list[TargetVariant] = [
     CortexMVariant(Path('v6m/nofp'),
                    'armv6m',
                    ['-march=armv6m', '-mfpu=none', '-mfloat-abi=soft']),
-    # CortexMVariant(Path('v7m/nofp'),
-    #                'armv7m',
-    #                ['-march=armv7m', '-mfpu=none', '-mfloat-abi=soft']),
-    # CortexMVariant(Path('v7em/nofp'),
-    #                'armv7em',
-    #                ['-march=armv7em', '-mfpu=none', '-mfloat-abi=soft']),
-    # CortexMVariant(Path('v7em/fpv4-sp-d16'),
-    #                'armv7em',
-    #                ['-march=armv7em', '-mfpu=fpv4-sp-d16', '-mfloat-abi=hard']),
+    CortexMVariant(Path('v7m/nofp'),
+                   'armv7m',
+                   ['-march=armv7m', '-mfpu=none', '-mfloat-abi=soft']),
+    CortexMVariant(Path('v7em/nofp'),
+                   'armv7em',
+                   ['-march=armv7em', '-mfpu=none', '-mfloat-abi=soft']),
+    CortexMVariant(Path('v7em/fpv4-sp-d16'),
+                   'armv7em',
+                   ['-march=armv7em', '-mfpu=fpv4-sp-d16', '-mfloat-abi=hard']),
     CortexMVariant(Path('v7em/fpv5-d16'),
                    'armv7em',
                    ['-march=armv7em', '-mfpu=fpv5-d16', '-mfloat-abi=hard']),
-    # CortexMVariant(Path('v8m.base/nofp'),
-    #                'armv8m.base',
-    #                ['-march=armv8m.base', '-mfpu=none', '-mfloat-abi=soft']),
-    # CortexMVariant(Path('v8m.main/nofp'),
-    #                'armv8m.main',
-    #                ['-march=armv8m.main', '-mfpu=none', '-mfloat-abi=soft']),
-    # CortexMVariant(Path('v8m.main/fpv5-sp-d16'),
-    #                'armv8m.main',
-    #                ['-march=armv8m.main', '-mfpu=fpv5-sp-d16', '-mfloat-abi=hard']),
-    # CortexMVariant(Path('v8.1m.main/nofp/nomve'),
-    #                'armv8.1m.main',
-    #                ['-march=armv8.1m.main', '-mfpu=none', '-mfloat-abi=soft']),
-    # CortexMVariant(Path('v8.1m.main/nofp/mve'),
-    #                'armv8.1m.main+mve',
-    #                ['-march=armv8.1m.main+mve', '-mfpu=none', '-mfloat-abi=hard']), # MVE needs hard ABI
-    # CortexMVariant(Path('v8.1m.main/fp-armv8-fullfp16-d16/nomve'),
-    #                'armv8.1m.main',
-    #                ['-march=armv8.1m.main', '-mfpu=fp-armv8-fullfp16-d16', '-mfloat-abi=hard']),
-    # CortexMVariant(Path('v8.1m.main/fp-armv8-fullfp16-d16/mve'),
-    #                'armv8.1m.main+mve.fp+fp.dp',
-    #                ['-march=armv8.1m.main+mve.fp+fp.dp', '-mfpu=fp-armv8-fullfp16-d16', '-mfloat-abi=hard']),
+    CortexMVariant(Path('v8m.base/nofp'),
+                   'armv8m.base',
+                   ['-march=armv8m.base', '-mfpu=none', '-mfloat-abi=soft']),
+    CortexMVariant(Path('v8m.main/nofp'),
+                   'armv8m.main',
+                   ['-march=armv8m.main', '-mfpu=none', '-mfloat-abi=soft']),
+    CortexMVariant(Path('v8m.main/fpv5-sp-d16'),
+                   'armv8m.main',
+                   ['-march=armv8m.main', '-mfpu=fpv5-sp-d16', '-mfloat-abi=hard']),
+    CortexMVariant(Path('v8.1m.main/nofp/nomve'),
+                   'armv8.1m.main',
+                   ['-march=armv8.1m.main', '-mfpu=none', '-mfloat-abi=soft']),
+    CortexMVariant(Path('v8.1m.main/nofp/mve'),
+                   'armv8.1m.main+mve',
+                   ['-march=armv8.1m.main+mve', '-mfpu=none', '-mfloat-abi=hard']), # MVE needs hard ABI
+    CortexMVariant(Path('v8.1m.main/fp-armv8-fullfp16-d16/nomve'),
+                   'armv8.1m.main',
+                   ['-march=armv8.1m.main', '-mfpu=fp-armv8-fullfp16-d16', '-mfloat-abi=hard']),
+    CortexMVariant(Path('v8.1m.main/fp-armv8-fullfp16-d16/mve'),
+                   'armv8.1m.main+mve.fp+fp.dp',
+                   ['-march=armv8.1m.main+mve.fp+fp.dp', '-mfpu=fp-armv8-fullfp16-d16', '-mfloat-abi=hard']),
 
     # CortexAVariant(Path('v7a/nofp'),
     #                'armv7a',
@@ -200,22 +200,5 @@ def create_build_variants() -> list[TargetVariant]:
     # file based on the selected CMake build type. We might need to handle the -fexceptions and
     # -frtti options in the future.
 
-    #variants: list[TargetVariant] = []
-    # opts = [(Path('.'),  ['-O0']),
-    #         (Path('o1'), ['-O1']),
-    #         (Path('o2'), ['-O2']),
-    #         (Path('o3'), ['-O3']),
-    #         (Path('os'), ['-Os']),
-    #         (Path('oz'), ['-Oz'])]
-    #
-    # for target in TARGETS:
-    #     for opt in opts:
-    #         variant_path = target.path / opt[0]
-    #         variant_options = target.options + opt[1]
-    #         variants.append(TargetVariant(target.series, target.triple, variant_path, 
-    #                                       target.arch, variant_options))
-
-    # return variants
-
-    print("****BUILDING REDUCED VARIANTS FOR DEBUGGING****")
+    # print("****BUILDING REDUCED VARIANTS FOR DEBUGGING****")
     return TARGETS
