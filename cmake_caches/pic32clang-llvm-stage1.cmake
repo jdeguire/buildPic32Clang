@@ -25,9 +25,6 @@ set(LLVM_TARGETS_TO_BUILD Native CACHE STRING "")
 # Optimize the stage1 compiler, but don't LTO it because that wastes time.
 set(CMAKE_BUILD_TYPE Release CACHE STRING "")
 
-# Setup vendor-specific settings.
-set(PACKAGE_VENDOR LLVM.org CACHE STRING "")
-
 # Setting up the stage2 LTO option needs to be done on the stage1 build so that
 # the proper LTO library dependencies can be connected.
 set(BOOTSTRAP_LLVM_ENABLE_LTO ON CACHE BOOL "")

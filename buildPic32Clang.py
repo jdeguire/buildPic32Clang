@@ -340,6 +340,7 @@ def build_single_stage_llvm(args: argparse.Namespace) -> None:
         f'-DLLVM_ENABLE_LTO={get_cmake_bool(args.enable_lto)}',
         f'-DLLVM_PARALLEL_COMPILE_JOBS={args.compile_jobs}',
         f'-DLLVM_PARALLEL_LINK_JOBS={args.link_jobs}',
+        f'-DPACKAGE_VENDOR=pic32Clang v{PIC32_CLANG_VERSION}:',
         '-C', cmake_config_path.as_posix(),
         src_dir.as_posix()
     ]
@@ -378,10 +379,11 @@ def build_two_stage_llvm(args: argparse.Namespace) -> None:
     gen_cmd = [
         'cmake', '-G', 'Ninja',
         f'-DCMAKE_INSTALL_PREFIX={install_dir.as_posix()}',
-        f'-DBOOTSTRAP_LLVM_ENABLE_LTO={get_cmake_bool(args.enable_lto)}',
-        f'-DBOOTSTRAP_CMAKE_BUILD_TYPE={args.llvm_build_type}',
         f'-DLLVM_PARALLEL_COMPILE_JOBS={args.compile_jobs}',
         f'-DLLVM_PARALLEL_LINK_JOBS={args.link_jobs}',
+        f'-DPACKAGE_VENDOR=pic32Clang v{PIC32_CLANG_VERSION}:',
+        f'-DBOOTSTRAP_LLVM_ENABLE_LTO={get_cmake_bool(args.enable_lto)}',
+        f'-DBOOTSTRAP_CMAKE_BUILD_TYPE={args.llvm_build_type}',
         f'-DBOOTSTRAP_LLVM_PARALLEL_COMPILE_JOBS={args.compile_jobs}',
         f'-DBOOTSTRAP_LLVM_PARALLEL_LINK_JOBS={args.link_jobs}',
         '-C', cmake_config_path.as_posix(),
@@ -408,34 +410,46 @@ def add_stdio_file_decls() -> None:
     with open(stdio_h_path, 'r', encoding='utf-8') as stdio_in:
         stdio_list = list(stdio_in)
 
-    # Now, check if the file has already been updated. For now, we'll just look for one file IO
-    # function declaration and assume we already updated the file if we see it.
-    # TODO: Check for each declaration in case a future version adds some file IO but not all.
+    # Now, check what delcarations are already present. Thesse make up the minimal set needed for
+    # libc++. We'll check for each one in case some are already declared.
+    stdio_decls: dict[str, str] = {
+        'fprintf': 'int fprintf(FILE *__restrict, const char *__restrict, ... )',
+        'vfprintf': 'int vfprintf(FILE *__restrict, const char *__restrict, va_list)',
+        'fwrite': 'size_t fwrite(const void *__restrict, size_t, size_t, FILE *__restrict)',
+        'ferror': 'int ferror(FILE *)',
+        'feof': 'int feof(FILE *)',
+        'fflush': 'int fflush(FILE *)'
+    }
+
     for line_no, line_str in enumerate(stdio_list):
-        if 'vfprintf' in line_str:
-            # Found this, so assume file was already updated.
-            break
+        if not line_str:
+            continue
+
+        # Does this line contain a stdio declaration we need? If so, we can remove the declaration
+        # from our dictionary.
+        for key in stdio_decls:
+            if key in line_str:
+                del stdio_decls[key]
+                break
 
         if '__END_C_DECLS' in line_str:
             # Found end of declarations, so remember where we are so we can add our declarations.
             update_index = line_no
             break
 
-    if update_index < 0:
+    if update_index < 0  or  not stdio_decls:
         return
     
     # We need to update the file, so overwrite it while adding our new declarations.
     with open(stdio_h_path, 'w', encoding='utf-8') as stdio_out:
         for line_no, line_str in enumerate(stdio_list):
             if line_no == update_index:
-                stdio_out.write('/* Manually added minimal stdio file functions needed for libc++.\n')
-                stdio_out.write('   Users will need to implement these own their own. */\n')
-                stdio_out.write('int fprintf(FILE *__restrict, const char *__restrict, ... ) __NOEXCEPT;\n')
-                stdio_out.write('int vfprintf(FILE *__restrict, const char *__restrict, va_list) __NOEXCEPT;\n')
-                stdio_out.write('size_t fwrite(const void *__restrict, size_t, size_t, FILE *__restrict) __NOEXCEPT;\n')
-                stdio_out.write('int ferror(FILE *) __NOEXCEPT;\n')
-                stdio_out.write('int feof(FILE *) __NOEXCEPT;\n')
-                stdio_out.write('int fflush(FILE *) __NOEXCEPT;\n')
+                stdio_out.write('/* Manually added additional stdio file functions needed for libc++. Users need\n')
+                stdio_out.write('   to implement these on their own. Trivial implemenatations are usually fine.*/\n')
+
+                for key, val in stdio_decls.items():
+                    stdio_out.write(val + ' __NOEXCEPT;\n')
+
                 stdio_out.write('\n')
 
             stdio_out.write(line_str)
@@ -507,7 +521,7 @@ def build_llvm_runtimes(args: argparse.Namespace, variant: TargetVariant):
     add_stdio_file_decls()
 
     run_subprocess(['cmake', '--build', '.', '--target', 'install-unwind'],
-                   f'Build/Install libcxxabi ({which_variant_str})',
+                   f'Build/Install libunwind ({which_variant_str})',
                    build_dir)
 
     run_subprocess(['cmake', '--build', '.', '--target', 'install-cxxabi'],
