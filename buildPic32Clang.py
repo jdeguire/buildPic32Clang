@@ -66,7 +66,7 @@ import tkinter.filedialog
 # command line or 'all' can be used to do all of these.
 ALL_BUILD_STEPS = ['clone', 'llvm', 'runtimes', 'devfiles', 'cmsis', 'startup']
 
-PIC32_CLANG_VERSION = '0.01'
+PIC32_CLANG_VERSION = '0.1.0'
 PIC32_CLANG_PROJECT_URL = 'https://github.com/jdeguire/buildPic32Clang'
 
 # '/' is an operator for stuff in pathlib that joins path segments.
@@ -569,12 +569,19 @@ def build_device_files(args: argparse.Namespace) -> None:
     build_dir = BUILD_PREFIX / 'pic32-device-file-maker'
     output_dir = Path(os.path.relpath(build_dir, PIC32_FILE_MAKER_SRC_DIR))
 
+    versions: list[str] = str(PIC32_CLANG_VERSION).split('.')
+
     # Run the maker app.
     #
     build_cmd = [
         'python3', './pic32-device-file-maker.py',
         '--parse-jobs', str(args.compile_jobs),
         '--output-dir', output_dir.as_posix(),
+        '--define-macro', '__pic32clang__',
+        '--define-macro', f'__pic32clang_major__={versions[0]}',
+        '--define-macro', f'__pic32clang_minor__={versions[1]}',
+        '--define-macro', f'__pic32clang_patchevel__={versions[2]}',
+        '--define-macro', f'__pic32clang_version__="{PIC32_CLANG_VERSION}"',
         args.packs_dir.resolve().as_posix()
     ]
     run_subprocess(build_cmd, 'Make device-specifc files', PIC32_FILE_MAKER_SRC_DIR)
