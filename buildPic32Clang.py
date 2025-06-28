@@ -76,7 +76,6 @@ INSTALL_PREFIX = ROOT_WORKING_DIR / 'install'
 
 THIS_FILE_DIR = Path(os.path.dirname(os.path.realpath(__file__)))
 CMAKE_CACHE_DIR = THIS_FILE_DIR / 'cmake_caches'
-LIBC_CONFIG_DIR = THIS_FILE_DIR / 'llvm_libc_config'
 
 LLVM_REPO_URL = 'https://github.com/llvm/llvm-project.git'
 LLVM_REPO_BRANCH = 'llvmorg-20.1.0'
@@ -470,7 +469,6 @@ def build_llvm_runtimes(args: argparse.Namespace, variant: TargetVariant):
     toolchain_path = get_built_toolchain_abspath()
     cmake_config_path = Path(os.path.relpath(CMAKE_CACHE_DIR / 'pic32clang-target-runtimes.cmake',
                                              build_dir))
-    libc_config_path = LIBC_CONFIG_DIR / 'arm'
 
     # This suffix goes up a level because the LLVM CMake scripts add an extra '/lib/' we don't want.
     # These paths match the ones in our multilib.yaml file generated as part of the 'devfiles' step.
@@ -494,7 +492,6 @@ def build_llvm_runtimes(args: argparse.Namespace, variant: TargetVariant):
         'cmake', '-G', 'Ninja', 
         f'-DCMAKE_INSTALL_PREFIX={prefix_dir.as_posix()}',
         f'-DCMAKE_BUILD_TYPE={args.llvm_build_type}',
-        f'-DLIBC_CONFIG_PATH={libc_config_path.as_posix()}',
         f'-DPIC32CLANG_LIBDIR_SUFFIX={libdir_suffix.as_posix()}',
         f'-DPIC32CLANG_TARGET_TRIPLE={triple_str}',
         f'-DPIC32CLANG_RUNTIME_FLAGS={options_str}',
