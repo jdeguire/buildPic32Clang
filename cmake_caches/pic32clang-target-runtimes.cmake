@@ -28,15 +28,13 @@ set(PIC32CLANG_TARGET_TRIPLE "" CACHE STRING "The target triple for which to bui
 # like paths, to have them treated like a single entry.
 set(PIC32CLANG_RUNTIME_FLAGS "" CACHE STRING "Compiler flags for building the runtimes")
 
-# The path of the sysroot of Clang, presumably one that was just built for Pic32Clang,
+# The directory path to the toolchain, presumably one that was just built for Pic32Clang,
 # that will build the runtimes. If you are doing a two-stage build (which is what the Python
 # script in the parent directory does) then you will want to point this to the stage2 build
 # location instead of the installed location. This is because the build location has extra
 # CMake files that are needed by the runtime build. Find it at 
 # "<build-prefix>/llvm/tools/clang/stage2-bins".
-# TODO: Maybe change this from SYSROOT to something else because sysroot might mean something else.
-#       Maybe TOOLCHAIN_PATH or something.
-set(PIC32CLANG_SYSROOT "" CACHE PATH "The root of the compiler that will build the runtimes")
+set(PIC32CLANG_PATH "" CACHE PATH "The directory path to the compiler that will build the runtimes")
 
 # Use this to add a suffix to the location at which the libraries will be installed. This is used by
 # the Python script in the parent directory to create subdirectories for different variants of the
@@ -50,12 +48,12 @@ if(PIC32CLANG_TARGET_TRIPLE STREQUAL "")
     message(FATAL_ERROR "PIC32CLANG_TARGET_TRIPLE is empty. Provide a valid target.")
 endif()
 
-if(PIC32CLANG_SYSROOT STREQUAL "")
-    message(FATAL_ERROR "PIC32CLANG_SYSROOT is empty. Provide a valid sysroot.")
+if(PIC32CLANG_PATH STREQUAL "")
+    message(FATAL_ERROR "PIC32CLANG_PATH is empty. Provide a valid sysroot.")
 endif()
 
-if(NOT IS_DIRECTORY ${PIC32CLANG_SYSROOT})
-    message(FATAL_ERROR "PIC32CLANG_SYSROOT (${PIC32CLANG_SYSROOT}) is not a directory.")
+if(NOT IS_DIRECTORY ${PIC32CLANG_PATH})
+    message(FATAL_ERROR "PIC32CLANG_PATH (${PIC32CLANG_PATH}) is not a directory.")
 endif()
 
 # Add options that will apply regardless of target.
@@ -121,20 +119,12 @@ set(CMAKE_ASM_FLAGS_MINSIZEREL "-Oz -DNDEBUG" CACHE STRING "")
 
 
 set(CMAKE_CROSSCOMPILING ON CACHE BOOL "")
-set(CMAKE_SYSROOT "${PIC32CLANG_SYSROOT}" CACHE PATH "")
-if(WIN32)
-    set(CMAKE_C_COMPILER "${PIC32CLANG_SYSROOT}/bin/clang.exe" CACHE PATH "")
-    set(CMAKE_CXX_COMPILER "${PIC32CLANG_SYSROOT}/bin/clang++.exe" CACHE PATH "")
-    set(CMAKE_AR "${PIC32CLANG_SYSROOT}/bin/llvm-ar.exe" CACHE PATH "")
-    set(CMAKE_NM "${PIC32CLANG_SYSROOT}/bin/llvm-nm.exe" CACHE PATH "")
-    set(CMAKE_RANLIB "${PIC32CLANG_SYSROOT}/bin/llvm-ranlib.exe" CACHE PATH "")
-else()
-    set(CMAKE_C_COMPILER "${PIC32CLANG_SYSROOT}/bin/clang" CACHE PATH "")
-    set(CMAKE_CXX_COMPILER "${PIC32CLANG_SYSROOT}/bin/clang++" CACHE PATH "")
-    set(CMAKE_AR "${PIC32CLANG_SYSROOT}/bin/llvm-ar" CACHE PATH "")
-    set(CMAKE_NM "${PIC32CLANG_SYSROOT}/bin/llvm-nm" CACHE PATH "")
-    set(CMAKE_RANLIB "${PIC32CLANG_SYSROOT}/bin/llvm-ranlib" CACHE PATH "")
-endif()
+set(CMAKE_SYSROOT "${PIC32CLANG_PATH}" CACHE PATH "")
+set(CMAKE_C_COMPILER "${PIC32CLANG_PATH}/bin/clang${CMAKE_HOST_EXECUTABLE_SUFFIX}" CACHE PATH "")
+set(CMAKE_CXX_COMPILER "${PIC32CLANG_PATH}/bin/clang++${CMAKE_HOST_EXECUTABLE_SUFFIX}" CACHE PATH "")
+set(CMAKE_AR "${PIC32CLANG_PATH}/bin/llvm-ar${CMAKE_HOST_EXECUTABLE_SUFFIX}" CACHE PATH "")
+set(CMAKE_NM "${PIC32CLANG_PATH}/bin/llvm-nm${CMAKE_HOST_EXECUTABLE_SUFFIX}" CACHE PATH "")
+set(CMAKE_RANLIB "${PIC32CLANG_PATH}/bin/llvm-ranlib${CMAKE_HOST_EXECUTABLE_SUFFIX}" CACHE PATH "")
 set(CMAKE_C_COMPILER_TARGET ${PIC32CLANG_TARGET_TRIPLE} CACHE STRING "")
 set(CMAKE_CXX_COMPILER_TARGET ${PIC32CLANG_TARGET_TRIPLE} CACHE STRING "")
 set(CMAKE_ASM_COMPILER_TARGET ${PIC32CLANG_TARGET_TRIPLE} CACHE STRING "")
@@ -215,7 +205,7 @@ set(LIBC_TARGET_TRIPLE ${PIC32CLANG_TARGET_TRIPLE} CACHE STRING "")
 # so we can tune them how we want.
 # See "llvm/libc/config/baremetal/config.json" for the defaults. 
 # See "llvm/libc/src/__support/float_to_string.h" and "llvm/libc/docs/dev/printf_behavior.rst"
-# for addittional explanations for these. 
+# for additional explanations for these. 
 # TODO: Figure out how to make errno thread-local now that we support thread-local storage.
 #       Currently we provide a callback function to get a global errno. This is in the startup code.
 # TODO: How many libc options like these can be moved into the JSON config file?

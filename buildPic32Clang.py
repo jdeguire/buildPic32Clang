@@ -121,7 +121,7 @@ def get_built_toolchain_abspath() -> Path:
     the libraries.
 
     This returns the top-level directory for the toolchain--that is, the path at which the bin/,
-    lib/, and so on directories are located. This will use the build location  because the LLVM
+    lib/, and so on directories are located. This will use the build location because the LLVM
     libraries make use of CMake caches and other build items in that location rather than the
     final install location.
     '''
@@ -212,6 +212,8 @@ def run_subprocess(cmd_args: list[str], info_str: str, working_dir: Path | None 
         while True:
             # We need a number here or else this will block. On Unix, we can use os.set_blocking()
             # to disable this, but not on Windows.
+            # Update: Python 3.12 os.set_blocking() works on Windows pipes. This seems to work fine
+            # on Windows, but maybe I'll try that function anyway at some point.
             output = proc.stdout.read(4096).decode('utf-8', 'backslashreplace')
             if not output:
                 break
@@ -475,13 +477,6 @@ def build_llvm_runtimes(args: argparse.Namespace, variant: TargetVariant):
     # We add '/lib' to the end because LLVM adds that to the path in multilib.yaml.
     libdir_suffix = Path(f'../{variant.path.as_posix()}/lib')
 
-    # Testing suggests that the CMake scripts for the runtimes detect the Arm variant (ie. armv6m)
-    # from the triple rather than from the separate '-march=' option.
-    if variant.series.startswith('mips'):
-        triple_str = variant.triple
-    else:
-        triple_str = variant.arch + '-none-eabi'
-
     remake_dirs(build_dir)
 
     # TODO: The CMake script for the runtimes excludes the built-in atomics support because it fails
@@ -493,9 +488,9 @@ def build_llvm_runtimes(args: argparse.Namespace, variant: TargetVariant):
         f'-DCMAKE_INSTALL_PREFIX={prefix_dir.as_posix()}',
         f'-DCMAKE_BUILD_TYPE={args.llvm_build_type}',
         f'-DPIC32CLANG_LIBDIR_SUFFIX={libdir_suffix.as_posix()}',
-        f'-DPIC32CLANG_TARGET_TRIPLE={triple_str}',
+        f'-DPIC32CLANG_TARGET_TRIPLE={variant.triple}',
         f'-DPIC32CLANG_RUNTIME_FLAGS={options_str}',
-        f'-DPIC32CLANG_SYSROOT={toolchain_path.as_posix()}',
+        f'-DPIC32CLANG_PATH={toolchain_path.as_posix()}',
         f'-DLLVM_PARALLEL_COMPILE_JOBS={args.compile_jobs}',
         f'-DLLVM_PARALLEL_LINK_JOBS={args.link_jobs}',
         '-C', cmake_config_path.as_posix(),
@@ -552,7 +547,7 @@ def build_llvm_runtimes(args: argparse.Namespace, variant: TargetVariant):
 
     # LLVM-libc puts the outputs into a per-target directory. We already handle this, so move the
     # libc files up a level to be with the rest of the libraries.
-    libc_path = prefix / variant.path / 'lib' / triple_str
+    libc_path = prefix / variant.path / 'lib' / variant.triple
     for libc in libc_path.iterdir():
         new_path = libc.parent.parent / libc.name
         new_path.unlink(missing_ok=True)
@@ -607,7 +602,7 @@ def build_device_startup_files() -> None:
     if is_windows():
         compiler_path = Path(os.path.abspath(INSTALL_PREFIX / 'bin' / 'clang.exe'))
     else:
-        compiler_path = Path('../../../bin/clang')
+        compiler_path = Path(os.path.abspath(INSTALL_PREFIX / 'bin' / 'clang'))
 
     for proc_dir in crt0_dir.iterdir():
         if not proc_dir.is_dir():
@@ -859,7 +854,9 @@ if '__main__' == __name__:
     if 'runtimes' in args.steps:
         build_variants: list[TargetVariant] = pic32_target_variants.create_build_variants()
         for variant in build_variants:
-            build_llvm_runtimes(args, variant)
+            # build_llvm_runtimes(args, variant)
+            print(pic32_target_variants.get_multilib_flags_from_clang(variant, get_built_toolchain_abspath() / 'bin' / 'clang'))
+            print('----------')
 
     if 'devfiles' in args.steps:
         build_device_files(args)
