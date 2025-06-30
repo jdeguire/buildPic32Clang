@@ -40,6 +40,8 @@
 #
 
 from dataclasses import dataclass
+import datetime
+import os
 from pathlib import Path
 import subprocess
 
@@ -85,7 +87,8 @@ class CortexMVariant(TargetVariant):
         common_opts = [f'-march={arch}', '-mimplicit-it=always', '-fomit-frame-pointer']
 
         # The CMake files for one of the LLVM runtime libaries (maybe Compiler-RT?) looks for the 
-        # architecture in the target triple. We do not need extensions ("+foo") to be specified.
+        # architecture in the target triple. We do not need extensions ("+foo") to be specified
+        # since Clang seems to ignore them in the triple.
         triple = f'{arch.split('+')[0]}-none-eabi'
 
         return super().__init__('cortex-m', triple, multilib_path, common_opts + options)
@@ -123,46 +126,55 @@ class CortexAVariant(TargetVariant):
 # The best way I've found for seeing what you can pass to the compiler is to look in LLVM's source
 # code. The file "llvm/llvm/include/llvm/TargetParser/ARMTargetParser.def" has a list of FPU and CPU
 # names you can use to figure out the name of the FPU for your device.
-TARGETS: list[TargetVariant] = [
-    ## MIPS
-    # Mips32Variant(Path('r2/nofp'),
-    #               'mips32r2',
-    #               ['-msoft-float']),
-    # Mips32Variant(Path('r2/mips16/nofp'),
-    #               'mips32r2',
-    #               ['-mips16', '-msoft-float']),
-    # Mips32Variant(Path('r2/micromips/nofp'),
-    #               'mips32r2',
-    #               ['-mmicromips', '-msoft-float']),
-    # Mips32Variant(Path('r2/micromips/dspr2/nofp'),
-    #               'mips32r2',
-    #               ['-mmicromips', '-mdspr2', '-msoft-float']),
-    # Mips32Variant(Path('r2/dspr2/nofp'),
-    #               'mips32r2',
-    #               ['-mdspr2', '-msoft-float']),
-    # Mips32Variant(Path('r5/dspr2/nofp'),
-    #               'mips32r2',
-    #               ['-mdspr2', '-msoft-float']),
-    # Mips32Variant(Path('r5/dspr2/fpu64'),
-    #               'mips32r5',
-    #               ['-mdspr2', '-mhard-float', '-mfp64']),
-    # Mips32Variant(Path('r5/micromips/dspr2/nofp'),
-    #               'mips32r5',
-    #               ['-mmicromips', '-mdspr2', '-msoft-float']),
-    # Mips32Variant(Path('r5/micromips/dspr2/fpu64'),
-    #               'mips32r5',
-    #               ['-mmicromips', '-mdspr2', '-mhard-float', '-mfp64']),
+#
+# ***NOTE***
+# The order here matters! This is the order in which the variants will be listed in the multilib.yaml
+# file. These should be listed from most generic to most specific. That is, start with the lowest
+# architecture number and fewest features (FPU, MVE, etc.). As an example, a library built for armv6m
+# with no FPU will run on any other M-profile device, so that should be first. The last one should be
+# the newest revision (armv8.1m-main as of this writing) with all of the features.
 
+# ***NOTE***
+#
+_mips32_targets: list[TargetVariant] = [
+    Mips32Variant(Path('r2/nofp'),
+                  'mips32r2',
+                  ['-msoft-float']),
+    Mips32Variant(Path('r2/mips16/nofp'),
+                  'mips32r2',
+                  ['-mips16', '-msoft-float']),
+    Mips32Variant(Path('r2/micromips/nofp'),
+                  'mips32r2',
+                  ['-mmicromips', '-msoft-float']),
+    Mips32Variant(Path('r2/micromips/dspr2/nofp'),
+                  'mips32r2',
+                  ['-mmicromips', '-mdspr2', '-msoft-float']),
+    Mips32Variant(Path('r2/dspr2/nofp'),
+                  'mips32r2',
+                  ['-mdspr2', '-msoft-float']),
+    Mips32Variant(Path('r5/dspr2/nofp'),
+                  'mips32r2',
+                  ['-mdspr2', '-msoft-float']),
+    Mips32Variant(Path('r5/dspr2/fpu64'),
+                  'mips32r5',
+                  ['-mdspr2', '-mhard-float', '-mfp64']),
+    Mips32Variant(Path('r5/micromips/dspr2/nofp'),
+                  'mips32r5',
+                  ['-mmicromips', '-mdspr2', '-msoft-float']),
+    Mips32Variant(Path('r5/micromips/dspr2/fpu64'),
+                  'mips32r5',
+                  ['-mmicromips', '-mdspr2', '-mhard-float', '-mfp64']),
+]
+
+_cortexm_targets: list[TargetVariant] = [
     ## Armv6m
     CortexMVariant(Path('v6m/nofp'),
                    'armv6m',
                    ['-mfpu=none', '-mfloat-abi=soft']),
-
     ## Armv7m
     CortexMVariant(Path('v7m/nofp'),
                    'armv7m',
                    ['-mfpu=none', '-mfloat-abi=soft']),
-
     ## Armv7em
     CortexMVariant(Path('v7em/nofp'),
                    'armv7em',
@@ -176,12 +188,10 @@ TARGETS: list[TargetVariant] = [
     CortexMVariant(Path('v7em/fpv5-d16'),
                    'armv7em',
                    ['-mfpu=fpv5-d16', '-mfloat-abi=hard']),
-
     ## Armv8m.base
     CortexMVariant(Path('v8m.base/nofp'),
                    'armv8m.base',
                    ['-mfpu=none', '-mfloat-abi=soft']),
-
     ## Armv8m.main
     CortexMVariant(Path('v8m.main/nofp'),
                    'armv8m.main',
@@ -189,7 +199,9 @@ TARGETS: list[TargetVariant] = [
     CortexMVariant(Path('v8m.main/fpv5-sp-d16'),
                    'armv8m.main',
                    ['-mfpu=fpv5-sp-d16', '-mfloat-abi=hard']),
-
+    CortexMVariant(Path('v8m.main/fpv5-d16'),
+                   'armv8m.main',
+                   ['-mfpu=fpv5-d16', '-mfloat-abi=hard']),
     ## Armv8.1m.main
     CortexMVariant(Path('v8.1m.main/nofp/nomve'),
                    'armv8.1m.main',
@@ -209,29 +221,48 @@ TARGETS: list[TargetVariant] = [
     CortexMVariant(Path('v8.1m.main/fp-armv8-fullfp16-d16/mve'),
                    'armv8.1m.main+mve.fp+fp.dp',
                    ['-mfpu=fp-armv8-fullfp16-d16', '-mfloat-abi=hard']),
-
-    ## Armv7a
-    # CortexAVariant(Path('v7a/nofp'),
-    #                'armv7a',
-    #                ['-mfpu=none', '-mfloat-abi=soft']),
-    # CortexAVariant(Path('v7a/vfpv4-d16'),
-    #                'armv7a',
-    #                ['-mfpu=vfpv4-d16', '-mfloat-abi=hard']),
-    # CortexAVariant(Path('v7a/neon-vfpv4'),
-    #                'armv7a',
-    #                ['-mfpu=neon-vfpv4', '-mfloat-abi=hard']),
-    # CortexAVariant(Path('v7a/thumb/nofp'),
-    #                'armv7a',
-    #                ['-mthumb', '-mfpu=none', '-mfloat-abi=soft']),
-    # CortexAVariant(Path('v7a/thumb/vfpv4-d16'),
-    #                'armv7a',
-    #                ['-mthumb', '-mfpu=vfpv4-d16', '-mfloat-abi=hard']),
-    # CortexAVariant(Path('v7a/thumb/neon-vfpv4'),
-    #                'armv7a',
-    #                ['-mthumb', '-mfpu=neon-vfpv4', '-mfloat-abi=hard']),
 ]
 
-def get_multilib_flags_from_clang(variant: TargetVariant, clang_path: Path) -> list[str]:
+_cortexa_targets: list[TargetVariant] = [
+    CortexAVariant(Path('v7a/nofp'),
+                   'armv7a',
+                   ['-mfpu=none', '-mfloat-abi=soft']),
+    CortexAVariant(Path('v7a/vfpv4-d16'),
+                   'armv7a',
+                   ['-mfpu=vfpv4-d16', '-mfloat-abi=hard']),
+    CortexAVariant(Path('v7a/neon-vfpv4'),
+                   'armv7a',
+                   ['-mfpu=neon-vfpv4', '-mfloat-abi=hard']),
+    CortexAVariant(Path('v7a/thumb/nofp'),
+                   'armv7a',
+                   ['-mthumb', '-mfpu=none', '-mfloat-abi=soft']),
+    CortexAVariant(Path('v7a/thumb/vfpv4-d16'),
+                   'armv7a',
+                   ['-mthumb', '-mfpu=vfpv4-d16', '-mfloat-abi=hard']),
+    CortexAVariant(Path('v7a/thumb/neon-vfpv4'),
+                   'armv7a',
+                   ['-mthumb', '-mfpu=neon-vfpv4', '-mfloat-abi=hard']),
+]
+
+
+_license: list[str] = [
+    f'Copyright (c) {datetime.date.today().year}, Jesse DeGuire',
+    '',
+    'SPDX-License-Identifier: Apache-2.0',
+    '',
+    'Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file', 
+    'except in compliance with the License. You may obtain a copy of the License at',
+    '',
+    'http://www.apache.org/licenses/LICENSE-2.0',
+    '',
+    'Unless required by applicable law or agreed to in writing, software distributed under the',
+    'License is distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND,',
+    'either express or implied. See the License for the specific language governing permissions',
+    'and limitations under the License'
+]
+
+
+def get_multilib_flags_from_clang(variant: TargetVariant, toolchain_path: Path) -> list[str]:
     '''Query Clang for a set of flags used to determine which multilib variant it will use when
     linking.
 
@@ -240,6 +271,11 @@ def get_multilib_flags_from_clang(variant: TargetVariant, clang_path: Path) -> l
     normalized set of flags it will use to select the multilibs. We need to know what these normalized
     flags are, so Clang provides a way to query them.
     '''
+    if 'nt' == os.name:
+        clang_path = toolchain_path / 'bin' / 'clang.exe'
+    else:
+        clang_path = toolchain_path / 'bin' / 'clang'
+
     # As of Clang 20, the option to get the flags is "-print-multi-flags-experiemental'. If you are
     # running a newer version and that option does not appear to work, then remove the "-experimental"
     # part and try again.
@@ -251,6 +287,76 @@ def get_multilib_flags_from_clang(variant: TargetVariant, clang_path: Path) -> l
     proc = subprocess.run(cmd, capture_output=True, timeout=5.0, check=True, text=True, encoding='utf-8')
 
     return proc.stdout.split()
+
+
+def create_multilib_yaml(yaml_file: Path, variants: list[TargetVariant], toolchain_path: Path,
+                         our_git_repo: str, our_version: str) -> None:
+    '''Create a multilib.yaml file at the given path containing the given build variants.
+    '''
+    if yaml_file.is_dir():
+        raise ValueError(f'{yaml_file} is a directory.')
+    
+    yaml_file.unlink(missing_ok=True)
+    os.makedirs(yaml_file.parent, exist_ok=True)
+
+    with open(yaml_file, 'w', encoding='utf-8', newline='\n') as yaml:
+        yaml.write(f'# Generated by buidPic32Clang {our_version}\n')
+        yaml.write(f'# {our_git_repo}\n')
+        yaml.write('\n')
+
+        for l in _license:
+            yaml.write('# ' + l + '\n')
+
+        yaml.write('\n')
+        yaml.write('# This is was adapted from a test YAML file found at "clang/test/Driver/baremetal-multilib.yaml"\n')
+        yaml.write('# and the documentation at "clang/docs/Multilib.rst" or https://clang.llvm.org/docs/Multilib.html.\n')
+        yaml.write('# The test YAML file is well commented, so have a look there.\n')
+
+        yaml.write('\n')
+        yaml.write('# Clang will emit an error if this number is greater than its current multilib version\n')
+        yaml.write('# or if its major version differs, but will accept lesser minor versions.\n')
+        yaml.write('MultilibVersion: 1.0\n')
+
+        yaml.write('\n')
+        yaml.write('# Here is the list of library variants and the flags Clang will look for to match them. Later\n')
+        yaml.write('# entries take precedence over earlier ones. The flags here are normalized from what is passed\n')
+        yaml.write('# to Clang. Use the "-print-multi-flags-experimental" option to see these flags.\n')
+        yaml.write('# Clang appends "/lib" to these directories when looking for the libraries.\n')
+        yaml.write('Variants:\n')
+
+        for v in variants:
+            all_flags = get_multilib_flags_from_clang(v, toolchain_path)
+            flags_to_write: list[str] = []
+
+            for f in all_flags:
+                if f.startswith('--target')  or  f.startswith('-march')  or  f.startswith('-mfpu'):
+                    flags_to_write.append(f)
+            
+            yaml.write(f'- Dir: {v.path}\n')
+            yaml.write(f'  Flags: [{', '.join(flags_to_write)}]\n\n')
+
+        yaml.write('\n\n')
+        yaml.write('# Now map detected flags to custom ones with regexes.\n')
+        yaml.write('Mappings:\n')
+        yaml.write('# Handle potential later v8m baseline versions, like v8.1m baseline.\n')
+        yaml.write('- Match: --target=thumbv8(\\.[0-9]+)?m\\.base-unknown-none-eabi\n')
+        yaml.write('  Flags: [--target=thumbv8m.base-unknown-none-eabi]\n')
+
+        yaml.write('\n')
+        yaml.write('# Handle potential later v8.xm mainline versions, like v8.2m\n')
+        yaml.write('- Match: --target=thumbv8\\.[1-9]m\\.main-unknown-none-eabi\n')
+        yaml.write('  Flags: [--target=thumbv8.1m.main-unknown-none-eabi]\n')
+        yaml.write('- Match: --target=thumbv8\\.[1-9]m\\.main-unknown-none-eabihf\n')
+        yaml.write('  Flags: [--target=thumbv8.1m.main-unknown-none-eabihf]\n')
+
+        # TODO: We will want to add this if we decide to filter options in the "-march" string.
+        #       We would want to filter out the "no__" options and maybe "fp16".
+        # yaml.write('\n')
+        # yaml.write('# Look for "+mve.fp" and "+mve" in the list of architecture extension flags.\n')
+        # yaml.write('- Match: -march=thumbv8\\.[1-9]m\\.main.*\\+mve\\.fp($|\\+).*\n')
+        # yaml.write('  Flags: [-march=thumbv8.1m.main+mve.fp]\n')
+        # yaml.write('- Match: -march=thumbv8\\.[1-9]m\\.main.*\\+mve($|\\+).*\n')
+        # yaml.write('  Flags: [-march=thumbv8.1m.main+mve]\n')
 
 
 def create_build_variants() -> list[TargetVariant]:
@@ -267,4 +373,4 @@ def create_build_variants() -> list[TargetVariant]:
     # -frtti options in the future.
 
     # print("****BUILDING REDUCED VARIANTS FOR DEBUGGING****")
-    return TARGETS
+    return _cortexm_targets

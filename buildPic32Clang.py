@@ -102,14 +102,6 @@ def get_dir_from_dialog(title: str | None = None, mustexist: bool = True) -> str
     return tkinter.filedialog.askdirectory(title=title, mustexist=mustexist)
 
 
-def is_windows() -> bool:
-    '''Return True if this script is running in a Windows environment.
-    
-    This returns False when run in a shell for the Windows Subsystem for Linux (WSL).
-    '''
-    return 'nt' == os.name
-
-
 def get_cmake_bool(sel: bool) -> str:
     '''Return ON or OFF based on the given boolean for use with CMake commands.
     '''
@@ -279,7 +271,7 @@ def clone_from_git(url: str, branch: str = '', dest_directory: Path | None = Non
         if len(parts) > 1:
             commit = parts[1]
 
-    if is_windows():
+    if 'nt' == os.name:
         cmd.append('--config')
         cmd.append('core.autocrlf=false')
 
@@ -473,7 +465,6 @@ def build_llvm_runtimes(args: argparse.Namespace, variant: TargetVariant):
                                              build_dir))
 
     # This suffix goes up a level because the LLVM CMake scripts add an extra '/lib/' we don't want.
-    # These paths match the ones in our multilib.yaml file generated as part of the 'devfiles' step.
     # We add '/lib' to the end because LLVM adds that to the path in multilib.yaml.
     libdir_suffix = Path(f'../{variant.path.as_posix()}/lib')
 
@@ -599,7 +590,7 @@ def build_device_startup_files() -> None:
     crt0_dir: Path = INSTALL_PREFIX / 'cortex-m' / 'proc'
     failed_devices: list[str] = []
 
-    if is_windows():
+    if 'nt' == os.name:
         compiler_path = Path(os.path.abspath(INSTALL_PREFIX / 'bin' / 'clang.exe'))
     else:
         compiler_path = Path(os.path.abspath(INSTALL_PREFIX / 'bin' / 'clang'))
@@ -834,7 +825,7 @@ if '__main__' == __name__:
     # The Windows Terminal (the one with tabs) supports ANSI escape codes, but the old console
     # (conhost.exe) does not unless the following weird workaround is done. This came from
     # https://bugs.python.org/issue30075.
-    if is_windows():
+    if 'nt' == os.name:
         subprocess.call('', shell=True)
 
     args = get_command_line_arguments()
@@ -855,8 +846,15 @@ if '__main__' == __name__:
         build_variants: list[TargetVariant] = pic32_target_variants.create_build_variants()
         for variant in build_variants:
             # build_llvm_runtimes(args, variant)
-            print(pic32_target_variants.get_multilib_flags_from_clang(variant, get_built_toolchain_abspath() / 'bin' / 'clang'))
-            print('----------')
+            # print(pic32_target_variants.get_multilib_flags_from_clang(variant, get_built_toolchain_abspath()))
+            # print('----------')
+            pass
+
+        pic32_target_variants.create_multilib_yaml(INSTALL_PREFIX / 'cortex-m' / 'multilib.yaml',
+                                                    build_variants,
+                                                    get_built_toolchain_abspath(),
+                                                    PIC32_CLANG_PROJECT_URL,
+                                                    PIC32_CLANG_VERSION)
 
     if 'devfiles' in args.steps:
         build_device_files(args)
