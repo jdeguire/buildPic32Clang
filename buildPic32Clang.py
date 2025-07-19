@@ -367,10 +367,6 @@ def build_two_stage_llvm(args: argparse.Namespace) -> None:
     # llvm/clang/cmake/caches that build a 2-stage distribution of LLVM/Clang. The 'stage1' cache
     # file already references the 'stage2' file, so we don't need to do anything with 'stage2' here.
     #
-    # TODO: There's a CMake variable called PACKAGE_VENDOR that could hold pic32Clang version info.
-    #       There's also PACKAGE_VERSION, but that appears to have LLVM's version in it.
-    #       Do I put that in the stage1 or stage2 file? Do I add BOOTSTRAP_ to the start? I think so
-    #       since anything starting with BOOTSTRAP_ is passed to the stage2 build automatically.
     gen_cmd = [
         'cmake', '-G', 'Ninja',
         f'-DCMAKE_INSTALL_PREFIX={install_dir.as_posix()}',
@@ -521,7 +517,6 @@ def build_llvm_runtimes(args: argparse.Namespace, variant: TargetVariant):
     # the directories to install them (option LLVM_ENABLE_PER_TARGET_RUNTIME_DIR). That ends up
     # being a pain for other reasons, but we need to remove the arch from the library name to help
     # Clang find Compiler-RT in our arch-specific directory structure.
-    # TODO: Armv8.1m.main targets with MVE are missing these files. Did we mess up or did the build?
     compiler_rt_path = prefix / variant.path / 'lib'
     for crt in compiler_rt_path.iterdir():
         if '-' in crt.name:
@@ -652,10 +647,8 @@ def pack_up_toolchain_as_zip() -> None:
     archive_file_name.unlink(missing_ok=True)
     with zipfile.ZipFile(archive_file_name, mode='w', compression=zipfile.ZIP_DEFLATED,
                             allowZip64=True, compresslevel=9, strict_timestamps=False) as archive:
-        # archive.write(INSTALL_PREFIX, arcname=f'v{PIC32_CLANG_VERSION}')
-
-        for dirpath, dirnames, filenames in os.walk(INSTALL_PREFIX):
-            archive_path = dirpath.replace(str(INSTALL_PREFIX), f'v{PIC32_CLANG_VERSION}', count=1)
+        for dirpath, _, filenames in os.walk(INSTALL_PREFIX):
+            archive_path = dirpath.replace(str(INSTALL_PREFIX), f'v{PIC32_CLANG_VERSION}', 1)
 
             for f in filenames:
                 archive.write(Path(dirpath, f), str(Path(archive_path, f)))
@@ -886,10 +879,7 @@ if '__main__' == __name__:
     if 'runtimes' in args.steps:
         build_variants: list[TargetVariant] = pic32_target_variants.create_build_variants()
         for variant in build_variants:
-            # build_llvm_runtimes(args, variant)
-            # print(pic32_target_variants.get_multilib_flags_from_clang(variant, get_built_toolchain_abspath()))
-            # print('----------')
-            pass
+            build_llvm_runtimes(args, variant)
 
         pic32_target_variants.create_multilib_yaml(INSTALL_PREFIX / 'cortex-m' / 'multilib.yaml',
                                                     build_variants,
