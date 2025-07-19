@@ -80,6 +80,10 @@ Here are the command-line arguments you can supply to control how the script run
     - **cmsis**: Copy the Arm CMSIS files to their proper locations.
     - **startup**: Build the startup code for the devices with this toolchain. The other steps must
     either be specified as well or completed in a previous run.
+    - **package**: Package all of the toolchain files into an archive for distribution. The archive
+    will be a `.zip` on Windows and a `.tar.bz2` everywhere else. The top level directory in the
+    archive will contain the Pic32Clang version, so that multiple versions can easily exist together
+    on a system. The archive will be located in the "pic32clang" directory.
     - **all**: Do all of the above. This is the default.
 - `--packs-dir DIR`  
     Indicate where the this script can find the Microchip packs used to provide information about

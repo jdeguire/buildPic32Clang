@@ -58,13 +58,15 @@ import pic32_target_variants
 from pic32_target_variants import TargetVariant
 import shutil
 import subprocess
+import tarfile
 import time
 import tkinter
 import tkinter.filedialog
+import zipfile
 
 # These are the build steps this script can do. The steps to be done can be given on the 
 # command line or 'all' can be used to do all of these.
-ALL_BUILD_STEPS = ['clone', 'llvm', 'runtimes', 'devfiles', 'cmsis', 'startup']
+ALL_BUILD_STEPS = ['clone', 'llvm', 'runtimes', 'devfiles', 'cmsis', 'startup', 'package']
 
 PIC32_CLANG_VERSION = '0.1.0'
 PIC32_CLANG_PROJECT_URL = 'https://github.com/jdeguire/buildPic32Clang'
@@ -578,6 +580,18 @@ def build_device_files(args: argparse.Namespace) -> None:
     print('Done!')
 
 
+def copy_cmsis_files() -> None:
+    '''Copy the CMSIS header files to their proper spot in the source tree.
+
+    For CMSIS, there is nothing to build and so this just needs to copy files.
+    '''
+    print('Copying CMSIS files to their proper location...', end='')
+    shutil.copytree(CMSIS_SRC_DIR / 'CMSIS',
+                    INSTALL_PREFIX / 'CMSIS',
+                    dirs_exist_ok = True)
+    print('Done!')
+
+
 def build_device_startup_files() -> None:
     '''Build the startup files for each device into crt0.o object files.
 
@@ -624,16 +638,43 @@ def build_device_startup_files() -> None:
         print('\n'.join(failed_devices))
 
 
-def copy_cmsis_files() -> None:
-    '''Copy the CMSIS header files to their proper spot in the source tree.
+def pack_up_toolchain_as_zip() -> None:
+    '''Pack up the install files into a .zip compressed archive.
 
-    For CMSIS, there is nothing to build and so this just needs to copy files.
+    The top level directory will contain the Pic32Clang version at the top of this script. This will
+    allow multiple versions to easily exist together on a system without requiring the user to figure
+    that out. The file will be located in ROOT_WORKING_DIR (defined at the top of this script). 
     '''
-    print('Copying CMSIS files to their proper location...', end='')
-    shutil.copytree(CMSIS_SRC_DIR / 'CMSIS',
-                    INSTALL_PREFIX / 'CMSIS',
-                    dirs_exist_ok = True)
-    print('Done!')
+    archive_file_name: Path = ROOT_WORKING_DIR / f'pic32clang_{PIC32_CLANG_VERSION}.zip'
+
+    print(f'Creating archive {archive_file_name}; this might take a while...')
+
+    archive_file_name.unlink(missing_ok=True)
+    with zipfile.ZipFile(archive_file_name, mode='w', compression=zipfile.ZIP_DEFLATED,
+                            allowZip64=True, compresslevel=9, strict_timestamps=False) as archive:
+        # archive.write(INSTALL_PREFIX, arcname=f'v{PIC32_CLANG_VERSION}')
+
+        for dirpath, dirnames, filenames in os.walk(INSTALL_PREFIX):
+            archive_path = dirpath.replace(str(INSTALL_PREFIX), f'v{PIC32_CLANG_VERSION}', count=1)
+
+            for f in filenames:
+                archive.write(Path(dirpath, f), str(Path(archive_path, f)))
+
+
+def pack_up_toolchain_as_tarbz2() -> None:
+    '''Pack up the install files into a .tar.bz2 compressed archive.
+
+    The top level directory will contain the Pic32Clang version at the top of this script. This will
+    allow multiple versions to easily exist together on a system without requiring the user to figure
+    that out. The file will be located in ROOT_WORKING_DIR (defined at the top of this script). 
+    '''
+    archive_file_name: Path = ROOT_WORKING_DIR / f'pic32clang_{PIC32_CLANG_VERSION}.tar.bz2'
+
+    print(f'Creating archive {archive_file_name}; this might take a while...')
+
+    archive_file_name.unlink(missing_ok=True)
+    with tarfile.open(name=archive_file_name, mode='w:bz2', compresslevel=9) as archive:
+        archive.add(INSTALL_PREFIX, arcname=f'v{PIC32_CLANG_VERSION}', recursive=True)
 
 
 def get_command_line_arguments() -> argparse.Namespace:
@@ -864,6 +905,12 @@ if '__main__' == __name__:
 
     if 'startup' in args.steps:
         build_device_startup_files()
+
+    if 'package' in args.steps:
+        if 'nt' == os.name:
+            pack_up_toolchain_as_zip()
+        else:
+            pack_up_toolchain_as_tarbz2()
 
     # Do this extra print because otherwise the info string will be below where the command prompt
     # re-appears after this ends.
