@@ -23,10 +23,14 @@ compiler, you can go grab the latest Visual Studio Build Tools from https://visu
 In the installer, select "Desktop development with C++" then on the right side add a checkbox to
 "C++ ATL for latest vNNN build tools".
 
-You'll need to install a couple of packages using Python's package manager. You need `pyyaml` and,
-if you want to build docs, `sphinx`. After you install Python run `pip3 install pyyanml sphinx` to
-install both. You might see warning about scripts not being in your PATH. I was able to ignore those,
-but you can add the locations to your PATH if you run into issues.
+If you install Python using the installer from the Python website, you need to make sure your PATH
+is updated. There is a little checkbox early on in the installer that is easy to miss to do that.
+You might also see an option to install "tcl/tk" or something like that. You want that selected. If
+you install Python from the Windows Store, then these should be handled for you. Once you install
+Python, you'll need to install a couple of packages using Python's package manager. You need `pyyaml`
+and, if you want to build docs, `sphinx`. Run `pip3 install pyyaml sphinx` to install both. You might
+see warnings about scripts not being in your PATH if you are using the Windows Store version of Python.
+I was able to ignore those, but you can add the locations to your PATH if you run into issues.
 
 You should install and use the Windows Terminal app. This script uses ASCII control codes to
 provide a running status of what the script is doing and the old console does not support those
@@ -38,9 +42,15 @@ Your Python version might be a little old, but it may still work if it isn't too
 Something like Python 3.8 might be okay. If you're using a Debian or similar distribution--say
 Ubuntu or PopOS--you can get the `build-essential` package for a toolchain.
 
-Python packages might also be avaiable from your package manager. The package names may vary from
-distro to distro, but on Ubuntu you need the `python3-tk`, `python3-yaml`, and `python3-sphinx` if
-you want to build docs. On some distros, the packages might start with `python` instead of `python3`.
+For Python, You may need to install `tkinter` from your system's package manager. The name of the 
+package will vary based on your distribution, but will likely be something like `python3-tk` or
+`python3-tkinter`. You cannot install this from `pip`, Python's package manager.
+
+You'll also need to install the `pyyaml` and, if you want to build docs, `sphinx` packages. Try using
+`pip install pyyaml sphinx` to do that. If you get a message about your environment being "externally
+managed", then you'll need to use your system's package manager to get those packages. The package
+names may vary from distro to distro, but on Ubuntu you need the `python3-yaml` and `python3-sphinx`
+packages. On some distros, the packages might start with `python` instead of `python3`.
 
 ### Mac OS
 Mac OS users are unfortunately on their own since I don't currently own a Mac.
