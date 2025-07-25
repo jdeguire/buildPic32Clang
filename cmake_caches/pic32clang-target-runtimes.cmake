@@ -140,10 +140,18 @@ set(CMAKE_TRY_COMPILE_TARGET_TYPE STATIC_LIBRARY CACHE STRING "")
 # -----
 # LLVM stuff
 #
-# TODO: Try building the docs here and in the stage2 CMake file. I need to turn on LLVM_BUILD_DOCS
-#       to do that. See the other CMake file.
-set(LLVM_INCLUDE_DOCS OFF CACHE BOOL "")
-set(LLVM_ENABLE_SPHINX OFF CACHE BOOL "")
+# Add targets to build documentation using the Sphinx document generator if LLVM_BUILD_DOCS is ON.
+if(LLVM_BUILD_DOCS)
+  set(LLVM_INCLUDE_DOCS ON CACHE BOOL "")
+  set(LLVM_ENABLE_SPHINX ON CACHE BOOL "")
+  set(SPHINX_WARNINGS_AS_ERRORS OFF CACHE BOOL "")
+  set(SPHINX_OUTPUT_HTML ON CACHE BOOL "")
+  set(SPHINX_OUTPUT_MAN ON CACHE BOOL "")
+else()
+  set(LLVM_INCLUDE_DOCS OFF CACHE BOOL "")
+  set(LLVM_ENABLE_SPHINX OFF CACHE BOOL "")
+endif()
+
 set(LLVM_COMPILER_CHECKED ON CACHE BOOL "")
 set(LLVM_ENABLE_PER_TARGET_RUNTIME_DIR OFF CACHE BOOL "")
 set(LLVM_ENABLE_RUNTIMES "compiler-rt;libc;libcxx;libcxxabi;libunwind" CACHE STRING "")

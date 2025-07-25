@@ -16,21 +16,17 @@ set(LLVM_ENABLE_RUNTIMES "" CACHE STRING "")
 
 set(LLVM_TARGETS_TO_BUILD host;ARM;Mips CACHE STRING "")
 
-# Add targets to build documentation using the Sphinx document generator. These
-# will not automatically build the docs; set LLVM_BUILD_DOCS to ON for that.
-# TODO: revisit this later.
-# set(LLVM_INCLUDE_DOCS ON CACHE BOOL "")
-# set(LLVM_ENABLE_SPHINX ON CACHE BOOL "")
-# set(SPHINX_WARNINGS_AS_ERRORS OFF CACHE BOOL "")
-# set(SPHINX_OUTPUT_HTML ON CACHE BOOL "")
-# set(SPHINX_OUTPUT_MAN ON CACHE BOOL "")
-
-# Use libc++ and lld when building this stage 2 toolchain. These might already
-# be set for bootstrap builds, but might as well be sure.
-# TODO: Why was this commented out? I don't remember.
-#set(LLVM_ENABLE_LLD ON CACHE BOOL "")
-#set(LLVM_ENABLE_LIBCXX ON CACHE BOOL "")
-#set(LLVM_BUILD_STATIC ON CACHE BOOL "")
+# Add targets to build documentation using the Sphinx document generator if LLVM_BUILD_DOCS is ON.
+if(LLVM_BUILD_DOCS)
+  set(LLVM_INCLUDE_DOCS ON CACHE BOOL "")
+  set(LLVM_ENABLE_SPHINX ON CACHE BOOL "")
+  set(SPHINX_WARNINGS_AS_ERRORS OFF CACHE BOOL "")
+  set(SPHINX_OUTPUT_HTML ON CACHE BOOL "")
+  set(SPHINX_OUTPUT_MAN ON CACHE BOOL "")
+else()
+  set(LLVM_INCLUDE_DOCS OFF CACHE BOOL "")
+  set(LLVM_ENABLE_SPHINX OFF CACHE BOOL "")
+endif()
 
 # Build just the builtins for now. These and the rest of the runtime libraries need
 # to be built separately due to errors found when running CMake compiler tests. The
@@ -95,8 +91,5 @@ set(LLVM_DISTRIBUTION_COMPONENTS
   clang-resource-headers
   clang-tidy
   clangd
-# TODO: This was commented out because CMake said there was no target for it when trying to use this
-#       cache to create a single-stage build. Is it needed? Why complain now?
-#  builtins
   ${LLVM_TOOLCHAIN_TOOLS}
   CACHE STRING "")

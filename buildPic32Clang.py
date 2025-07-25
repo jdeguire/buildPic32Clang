@@ -335,6 +335,7 @@ def build_single_stage_llvm(args: argparse.Namespace) -> None:
         f'-DLLVM_ENABLE_LTO={get_cmake_bool(args.enable_lto)}',
         f'-DLLVM_PARALLEL_COMPILE_JOBS={args.compile_jobs}',
         f'-DLLVM_PARALLEL_LINK_JOBS={args.link_jobs}',
+        f'-DLLVM_BUILD_DOCS={get_cmake_bool(args.build_docs)}',
         f'-DPACKAGE_VENDOR=pic32Clang v{PIC32_CLANG_VERSION}:',
         '-C', cmake_config_path.as_posix(),
         src_dir.as_posix()
@@ -372,6 +373,7 @@ def build_two_stage_llvm(args: argparse.Namespace) -> None:
         f'-DCMAKE_INSTALL_PREFIX={install_dir.as_posix()}',
         f'-DLLVM_PARALLEL_COMPILE_JOBS={args.compile_jobs}',
         f'-DLLVM_PARALLEL_LINK_JOBS={args.link_jobs}',
+        f'-DLLVM_BUILD_DOCS={get_cmake_bool(args.build_docs)}',
         f'-DPACKAGE_VENDOR=pic32Clang v{PIC32_CLANG_VERSION}:',
         f'-DBOOTSTRAP_LLVM_ENABLE_LTO={get_cmake_bool(args.enable_lto)}',
         f'-DBOOTSTRAP_CMAKE_BUILD_TYPE={args.llvm_build_type}',
@@ -482,6 +484,7 @@ def build_llvm_runtimes(args: argparse.Namespace, variant: TargetVariant):
         f'-DPIC32CLANG_PATH={toolchain_path.as_posix()}',
         f'-DLLVM_PARALLEL_COMPILE_JOBS={args.compile_jobs}',
         f'-DLLVM_PARALLEL_LINK_JOBS={args.link_jobs}',
+        f'-DLLVM_BUILD_DOCS={get_cmake_bool(args.build_docs)}',
         '-C', cmake_config_path.as_posix(),
         src_dir.as_posix()
     ]
@@ -735,6 +738,9 @@ def get_command_line_arguments() -> argparse.Namespace:
     parser.add_argument('--single-stage',
                         action='store_true',
                         help='do a single-stage LLVM build instead of two-stage')
+    parser.add_argument('--build-docs',
+                        action='store_true',
+                        help='build the LLVM documentation in HTML and manpage format')
     parser.add_argument('--compile-jobs',
                         type=int,
                         default=0,
@@ -814,6 +820,11 @@ def print_arg_info(args: argparse.Namespace) -> None:
         print('Packs dir found')
     else:
         print('Packs dir not found')
+
+    if args.build_docs:
+        print('Build LLVM docs')
+    else:
+        print('Skip LLVM docs')
 
     if args.single_stage:
         print('Single stage build selected')
