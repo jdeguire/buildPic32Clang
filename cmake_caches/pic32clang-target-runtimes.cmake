@@ -208,6 +208,10 @@ set(LIBUNWIND_ENABLE_ASSERTIONS OFF CACHE BOOL "")
 set(LLVM_LIBC_FULL_BUILD ON CACHE BOOL "")
 set(LLVM_LIBC_INCLUDE_SCUDO OFF CACHE BOOL "")
 set(LIBC_TARGET_TRIPLE ${PIC32CLANG_TARGET_TRIPLE} CACHE STRING "")
+# This puts all C declarations into the header files even if the implementation is not provided on
+# our target. Do this so we can provide our own implementations for things like file IO or time
+# functions.
+set(LLVM_LIBC_ALL_HEADERS ON CACHE BOOL "")
 
 # Printf options:
 # Some of these are disabled by default for baremetal targets. Explicity put the options here
@@ -215,9 +219,6 @@ set(LIBC_TARGET_TRIPLE ${PIC32CLANG_TARGET_TRIPLE} CACHE STRING "")
 # See "llvm/libc/config/baremetal/config.json" for the defaults. 
 # See "llvm/libc/src/__support/float_to_string.h" and "llvm/libc/docs/dev/printf_behavior.rst"
 # for additional explanations for these. 
-# TODO: Figure out how to make errno thread-local now that we support thread-local storage.
-#       Currently we provide a callback function to get a global errno. This is in the startup code.
-# TODO: How many libc options like these can be moved into the JSON config file?
 set(LIBC_CONF_PRINTF_DISABLE_INDEX_MODE ON CACHE STRING "")
 set(LIBC_CONF_PRINTF_DISABLE_STRERROR ON CACHE STRING "")
 set(LIBC_CONF_PRINTF_DISABLE_WRITE_INT ON CACHE STRING "")
@@ -248,10 +249,6 @@ set(LIBCXX_INCLUDE_BENCHMARKS OFF CACHE BOOL "")
 
 set(LIBCXX_ENABLE_EXCEPTIONS ON CACHE BOOL "")
 set(LIBCXX_HARDENING_MODE fast CACHE STRING "")
-
-# TODO: Do I need to get the LIBCXX_LIBC option to work? Setting that to "llvm-libc" makes the build
-#       fail because it does not see my modified headers with file IO stuff. Maybe I just need to
-#       make a real configuration for us with our own entrypoints file.
 
 # TODO: Libc++ might be including its own giant tables for its own std::print stuff. Are there
 #       options to reduce those like with Libc? It's basically including duplicates.

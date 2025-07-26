@@ -56,6 +56,7 @@ set(CLANG_BOOTSTRAP_TARGETS
   clang-test-depends
   distribution
   install-distribution
+  sphinx
   clang CACHE STRING "")
 
 # Setup the bootstrap build.

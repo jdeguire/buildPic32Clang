@@ -26,11 +26,14 @@ In the installer, select "Desktop development with C++" then on the right side a
 If you install Python using the installer from the Python website, you need to make sure your PATH
 is updated. There is a little checkbox early on in the installer that is easy to miss to do that.
 You might also see an option to install "tcl/tk" or something like that. You want that selected. If
-you install Python from the Windows Store, then these should be handled for you. Once you install
-Python, you'll need to install a couple of packages using Python's package manager. You need `pyyaml`
-and, if you want to build docs, `sphinx`. Run `pip3 install pyyaml sphinx` to install both. You might
-see warnings about scripts not being in your PATH if you are using the Windows Store version of Python.
-I was able to ignore those, but you can add the locations to your PATH if you run into issues.
+you install Python from the Windows Store, then these should be handled for you.
+
+Once you install Python, you'll need to install a couple of packages using Python's package manager.
+You need `pyyaml` at minimum. You can get it with `pip3 install pyyaml`. If you want to build the
+documentation, then you'll also need to run `pip3 install sphinx sphinx-reredirects myst-parser`.
+You might see warnings about scripts not being in your PATH if you are using the Windows Store
+version of Python. You will probably want to add those to your PATH or use the install from the
+Python website.
 
 You should install and use the Windows Terminal app. This script uses ASCII control codes to
 provide a running status of what the script is doing and the old console does not support those
@@ -46,11 +49,16 @@ For Python, You may need to install `tkinter` from your system's package manager
 package will vary based on your distribution, but will likely be something like `python3-tk` or
 `python3-tkinter`. You cannot install this from `pip`, Python's package manager.
 
-You'll also need to install the `pyyaml` and, if you want to build docs, `sphinx` packages. Try using
-`pip install pyyaml sphinx` to do that. If you get a message about your environment being "externally
-managed", then you'll need to use your system's package manager to get those packages. The package
-names may vary from distro to distro, but on Ubuntu you need the `python3-yaml` and `python3-sphinx`
-packages. On some distros, the packages might start with `python` instead of `python3`.
+You'll also need to install `pyyaml`. Try running `pip install pyyaml` to do that. If you get a message
+about your environment being "externally managed", then you'll need to use your system's package
+manager instead. The package name may vary from distro to distro, but on Ubuntu you need the
+`python3-yaml` package. If you also want to build the documentation, you'll also need the `sphinx`,
+`sphinx-reredirects`, and the `myst-parser` packages. Again, whether you can use `pip` or your system
+package manager will depend on your system.
+
+If your distro uses `python3` but does not include `python`, then you will need to fix that. On Debian
+and its derivatives like Ubuntu, you can install the `python-is-python3` package. Otherwise, you can
+create an alias or symbolic link to map `python` to `python3`.
 
 ### Mac OS
 Mac OS users are unfortunately on their own since I don't currently own a Mac.
@@ -76,7 +84,7 @@ Here are the command-line arguments you can supply to control how the script run
 
 - `--help` or `-h`  
     Print a brief summary of these arguments and then exit.
-- `--steps {[clone, llvm, runtimes, devfiles, cmsis, startup, all]}`  
+- `--steps {[clone, llvm, runtimes, devfiles, cmsis, startup, package, all]}`  
     Select what this script should build and if it should clone the git repo for the selected 
     componenets first. Any combination of options works as long as at least one is provided. Use
     "all" to clone and build everything, which is the default.
@@ -128,6 +136,10 @@ Here are the command-line arguments you can supply to control how the script run
     useful for development. A two-stage build is normally recommended so that the distributed
     toolchain is always built with the latest tools. This can also help ensure the same behavior
     across platforms if you plan on distributing a toolchain on, say, Linux and Windows.
+- `--build-docs`  
+    Also build documentation when building LLVM and the runtimes. Documents are generated in HTML
+    and Unix Manpage formats for LLVM, Clang, and other tools. Only HTML is currently available for
+    the runtimes. You need extra packages to build documentation; see above for what you need.
 - `--compile-jobs`  
     Set the number of parallel compile processes to run when building any of the tools and when
     creating the device files. The default is 0, which will use one process per CPU. One per CPU is

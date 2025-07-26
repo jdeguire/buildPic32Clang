@@ -64,14 +64,14 @@ import tkinter
 import tkinter.filedialog
 import zipfile
 
+PIC32_CLANG_VERSION = '0.2.0'
+PIC32_CLANG_PROJECT_URL = 'https://github.com/jdeguire/buildPic32Clang'
+
+
 # These are the build steps this script can do. The steps to be done can be given on the 
 # command line or 'all' can be used to do all of these.
 ALL_BUILD_STEPS = ['clone', 'llvm', 'runtimes', 'devfiles', 'cmsis', 'startup', 'package']
 
-PIC32_CLANG_VERSION = '0.1.0'
-PIC32_CLANG_PROJECT_URL = 'https://github.com/jdeguire/buildPic32Clang'
-
-# '/' is an operator for stuff in pathlib that joins path segments.
 ROOT_WORKING_DIR = Path('./pic32clang')
 BUILD_PREFIX = ROOT_WORKING_DIR / 'build'
 INSTALL_PREFIX = ROOT_WORKING_DIR / 'install'
@@ -80,14 +80,14 @@ THIS_FILE_DIR = Path(os.path.dirname(os.path.realpath(__file__)))
 CMAKE_CACHE_DIR = THIS_FILE_DIR / 'cmake_caches'
 
 LLVM_REPO_URL = 'https://github.com/llvm/llvm-project.git'
-LLVM_REPO_BRANCH = 'llvmorg-20.1.0'
+LLVM_REPO_BRANCH = 'llvmorg-21.1.0-rc1'
 LLVM_SRC_DIR = ROOT_WORKING_DIR / 'llvm'
 
 PIC32_FILE_MAKER_REPO_URL = 'https://github.com/jdeguire/pic32-device-file-maker.git'
 PIC32_FILE_MAKER_SRC_DIR = ROOT_WORKING_DIR / 'pic32-device-file-maker'
 
 CMSIS_REPO_URL = 'https://github.com/ARM-software/CMSIS_6.git'
-CMSIS_REPO_BRANCH = 'v6.1.0'
+CMSIS_REPO_BRANCH = 'v6.2.0'
 CMSIS_SRC_DIR = ROOT_WORKING_DIR / 'cmsis'
 
 
@@ -345,6 +345,10 @@ def build_single_stage_llvm(args: argparse.Namespace) -> None:
     build_cmd = ['cmake', '--build', '.']
     run_subprocess(build_cmd, 'Build LLVM', build_dir)
 
+    if args.build_docs:
+        docs_cmd = ['cmake', '--build', '.', '--target', 'sphinx']
+        run_subprocess(docs_cmd, 'Build LLVM Docs', build_dir)
+
     install_cmd = ['cmake', '--build', '.', '--target', 'install']
     run_subprocess(install_cmd, 'Install LLVM', build_dir)
 
@@ -373,12 +377,12 @@ def build_two_stage_llvm(args: argparse.Namespace) -> None:
         f'-DCMAKE_INSTALL_PREFIX={install_dir.as_posix()}',
         f'-DLLVM_PARALLEL_COMPILE_JOBS={args.compile_jobs}',
         f'-DLLVM_PARALLEL_LINK_JOBS={args.link_jobs}',
-        f'-DLLVM_BUILD_DOCS={get_cmake_bool(args.build_docs)}',
         f'-DPACKAGE_VENDOR=pic32Clang v{PIC32_CLANG_VERSION}:',
         f'-DBOOTSTRAP_LLVM_ENABLE_LTO={get_cmake_bool(args.enable_lto)}',
         f'-DBOOTSTRAP_CMAKE_BUILD_TYPE={args.llvm_build_type}',
         f'-DBOOTSTRAP_LLVM_PARALLEL_COMPILE_JOBS={args.compile_jobs}',
         f'-DBOOTSTRAP_LLVM_PARALLEL_LINK_JOBS={args.link_jobs}',
+        f'-DBOOTSTRAP_LLVM_BUILD_DOCS={get_cmake_bool(args.build_docs)}',
         '-C', cmake_config_path.as_posix(),
         src_dir.as_posix()
     ]
@@ -387,68 +391,26 @@ def build_two_stage_llvm(args: argparse.Namespace) -> None:
     build_cmd = ['cmake', '--build', '.', '--target', 'stage2-distribution']
     run_subprocess(build_cmd, 'Build LLVM', build_dir)
 
+    if args.build_docs:
+        docs_cmd = ['cmake', '--build', '.', '--target', 'stage2-sphinx']
+        run_subprocess(docs_cmd, 'Build LLVM Docs', build_dir)
+
     install_cmd = ['cmake', '--build', '.', '--target', 'stage2-install-distribution']
     run_subprocess(install_cmd, 'Install LLVM', build_dir)
 
-
-def add_stdio_file_decls() -> None:
-    '''Add a minimal set of file I/O function declarations to LLVM-libc stdio.h to get libc++ to
-    build, such as vfprintf(), feof(), ferror(), and so on.
-    '''
-    stdio_h_path: Path = INSTALL_PREFIX / 'cortex-m' / 'include' / 'stdio.h'
-    stdio_list: list[str] = []
-    update_index: int = -1
-
-    # First, read the current file into a list. Each line is an element of the list.
-    with open(stdio_h_path, 'r', encoding='utf-8') as stdio_in:
-        stdio_list = list(stdio_in)
-
-    # Now, check what delcarations are already present. Thesse make up the minimal set needed for
-    # libc++. We'll check for each one in case some are already declared.
-    stdio_decls: dict[str, str] = {
-        'fprintf': 'int fprintf(FILE *__restrict, const char *__restrict, ... )',
-        'vfprintf': 'int vfprintf(FILE *__restrict, const char *__restrict, va_list)',
-        'fwrite': 'size_t fwrite(const void *__restrict, size_t, size_t, FILE *__restrict)',
-        'ferror': 'int ferror(FILE *)',
-        'feof': 'int feof(FILE *)',
-        'fflush': 'int fflush(FILE *)'
-    }
-
-    for line_no, line_str in enumerate(stdio_list):
-        if not line_str:
-            continue
-
-        # Does this line contain a stdio declaration we need? If so, we can remove the declaration
-        # from our dictionary.
-        for key in stdio_decls:
-            if key in line_str:
-                del stdio_decls[key]
-                break
-
-        if '__END_C_DECLS' in line_str:
-            # Found end of declarations, so remember where we are so we can add our declarations.
-            update_index = line_no
-            break
-
-    if update_index < 0  or  not stdio_decls:
-        return
-    
-    # We need to update the file, so overwrite it while adding our new declarations.
-    with open(stdio_h_path, 'w', encoding='utf-8') as stdio_out:
-        for line_no, line_str in enumerate(stdio_list):
-            if line_no == update_index:
-                stdio_out.write('/* Manually added additional stdio file functions needed for libc++. Users need\n')
-                stdio_out.write('   to implement these on their own. Trivial implemenatations are usually fine.*/\n')
-
-                for key, val in stdio_decls.items():
-                    stdio_out.write(val + ' __NOEXCEPT;\n')
-
-                stdio_out.write('\n')
-
-            stdio_out.write(line_str)
+    # NOTE:
+    # The stage2 CMake file turns ON LLVM_INSTALL_TOOLCHAIN_ONLY, which means documents are not
+    # installed. We can retrieve the main Clang docs from "STAGE2_BINS/tools/<proj>/docs" (seemingly
+    # just clang, lld, and polly), "STAGE2_BINS/tools/clang/tools/extra/docs", and "STAGE2_BINS/docs".
+    # That last one is mainly for developers and contains the stuff about how to build LLVM, contribute,
+    # fixes, and documentation on internals.
+    #
+    # TODO:
+    # Is there really any harm in turning off LLVM_INSTALL_TOOLCHAIN_ONLY, running "stage2-install",
+    # and just getting all the things?
 
 
-def build_llvm_runtimes(args: argparse.Namespace, variant: TargetVariant):
+def build_llvm_runtimes(args: argparse.Namespace, variant: TargetVariant, build_docs: bool):
     '''Build LLVM runtime libraries for a single build variant.
 
     Build libc, libc++, libc++abi, libunwind, and Compiler-RT for the given build variant using its
@@ -494,27 +456,37 @@ def build_llvm_runtimes(args: argparse.Namespace, variant: TargetVariant):
                    f'Generate runtimes build script ({which_variant_str})',
                    build_dir)
 
-    run_subprocess(['cmake', '--build', '.', '--target', 'install-compiler-rt'],
-                   f'Build/Install Compiler-RT ({which_variant_str})',
+    run_subprocess(['cmake', '--build', '.', '--target', 'compiler-rt'],
+                   f'Build Compiler-RT ({which_variant_str})',
                    build_dir)
 
-    run_subprocess(['cmake', '--build', '.', '--target', 'install-libc'],
-                   f'Build/Install LLVM-libc ({which_variant_str})',
+    run_subprocess(['cmake', '--build', '.', '--target', 'libc'],
+                   f'Build LLVM-libc ({which_variant_str})',
                    build_dir)
 
-    add_stdio_file_decls()
-
-    run_subprocess(['cmake', '--build', '.', '--target', 'install-unwind'],
-                   f'Build/Install libunwind ({which_variant_str})',
+    run_subprocess(['cmake', '--build', '.', '--target', 'unwind'],
+                   f'Build libunwind ({which_variant_str})',
                    build_dir)
 
-    run_subprocess(['cmake', '--build', '.', '--target', 'install-cxxabi'],
-                   f'Build/Install libcxxabi ({which_variant_str})',
+    run_subprocess(['cmake', '--build', '.', '--target', 'cxxabi'],
+                   f'Build libcxxabi ({which_variant_str})',
                    build_dir)
 
-    run_subprocess(['cmake', '--build', '.', '--target', 'install-cxx'],
-                   f'Build/Install libcxx ({which_variant_str})',
+    run_subprocess(['cmake', '--build', '.', '--target', 'cxx'],
+                   f'Build libcxx ({which_variant_str})',
                    build_dir)
+
+    if build_docs:
+        run_subprocess(['cmake', '--build', '.', '--target', 'sphinx'],
+                        f'Build Runtime Docs ({which_variant_str})',
+                        build_dir)
+
+    run_subprocess(['cmake', '--build', '.', '--target', 'install'],
+                    f'Install Runtimes ({which_variant_str})',
+                    build_dir)
+
+    # NOTE:
+    # Docs are installed into "INSTALL_PREFIX/cortex-m/share/doc/Runtimes".
 
     # Compiler-RT is built to include the arch name in the library name unless we let CMake decide
     # the directories to install them (option LLVM_ENABLE_PER_TARGET_RUNTIME_DIR). That ends up
@@ -889,8 +861,10 @@ if '__main__' == __name__:
 
     if 'runtimes' in args.steps:
         build_variants: list[TargetVariant] = pic32_target_variants.create_build_variants()
+        build_docs = args.build_docs
         for variant in build_variants:
-            build_llvm_runtimes(args, variant)
+            build_llvm_runtimes(args, variant, build_docs)
+            build_docs = False      # We need to build the docs only once.
 
         pic32_target_variants.create_multilib_yaml(INSTALL_PREFIX / 'cortex-m' / 'multilib.yaml',
                                                     build_variants,

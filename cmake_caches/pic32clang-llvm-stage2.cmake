@@ -17,7 +17,7 @@ set(LLVM_ENABLE_RUNTIMES "" CACHE STRING "")
 set(LLVM_TARGETS_TO_BUILD host;ARM;Mips CACHE STRING "")
 
 # Add targets to build documentation using the Sphinx document generator if LLVM_BUILD_DOCS is ON.
-if(LLVM_BUILD_DOCS)
+if(LLVM_BUILD_DOCS  OR  BOOTSTRAP_LLVM_BUILD_DOCS)
   set(LLVM_INCLUDE_DOCS ON CACHE BOOL "")
   set(LLVM_ENABLE_SPHINX ON CACHE BOOL "")
   set(SPHINX_WARNINGS_AS_ERRORS OFF CACHE BOOL "")
@@ -65,31 +65,45 @@ set(LLVM_TOOLCHAIN_TOOLS
   llc
   llvm-ar
   llvm-config
+  llvm-cov
   llvm-cxxfilt
   llvm-dwarfdump
+  llvm-lto
+  llvm-lto2
   llvm-mc
   llvm-nm
+  llvm-objcopy
   llvm-objdump
+  llvm-profdata
+  llvm-profgen
   llvm-ranlib
   llvm-readelf
   llvm-readobj
+  llvm-remarkutil
   llvm-size
+  llvm-strings
   llvm-symbolizer
-  llvm-lto
-  llvm-lto2
-  llvm-cov
-  llvm-objcopy
-  llvm-profdata
   opt
   CACHE STRING "")
 
 set(LLVM_DISTRIBUTION_COMPONENTS
   clang
   lld
+  liblldb
+  lldb
+  lldb-dap
+  lldb-python-scripts
   LTO
+  clang-apply-replacements
+  clang-doc
   clang-format
   clang-resource-headers
+  clang-include-fixer
+  clang-refactor
+  clang-scan-deps
   clang-tidy
+  find-all-symbols
   clangd
+  Remarks
   ${LLVM_TOOLCHAIN_TOOLS}
   CACHE STRING "")
