@@ -56,6 +56,7 @@ import os
 from pathlib import Path
 import pic32_target_variants
 from pic32_target_variants import TargetVariant
+import platform
 import shutil
 import subprocess
 import tarfile
@@ -608,14 +609,17 @@ def build_device_startup_files() -> None:
         print('\n'.join(failed_devices))
 
 
-def pack_up_toolchain_as_zip() -> None:
+def pack_up_toolchain_as_zip(suffix: str = '') -> None:
     '''Pack up the install files into a .zip compressed archive.
 
     The top level directory will contain the Pic32Clang version at the top of this script. This will
     allow multiple versions to easily exist together on a system without requiring the user to figure
     that out. The file will be located in ROOT_WORKING_DIR (defined at the top of this script). 
+
+    The suffix is added to the end of the compressed archive's name. Use this, for example, to
+    indicate that the toolchain was built for Windows vs Linux.
     '''
-    archive_file_name: Path = ROOT_WORKING_DIR / f'pic32clang_{PIC32_CLANG_VERSION}.zip'
+    archive_file_name: Path = ROOT_WORKING_DIR / f'pic32clang_{PIC32_CLANG_VERSION}{suffix}.zip'
 
     print(f'Creating archive {archive_file_name}; this might take a while...')
 
@@ -629,14 +633,17 @@ def pack_up_toolchain_as_zip() -> None:
                 archive.write(Path(dirpath, f), str(Path(archive_path, f)))
 
 
-def pack_up_toolchain_as_tarbz2() -> None:
+def pack_up_toolchain_as_tarbz2(suffix: str = '') -> None:
     '''Pack up the install files into a .tar.bz2 compressed archive.
 
     The top level directory will contain the Pic32Clang version at the top of this script. This will
     allow multiple versions to easily exist together on a system without requiring the user to figure
     that out. The file will be located in ROOT_WORKING_DIR (defined at the top of this script). 
+
+    The suffix is added to the end of the compressed archive's name. Use this, for example, to
+    indicate that the toolchain was built for Windows vs Linux.
     '''
-    archive_file_name: Path = ROOT_WORKING_DIR / f'pic32clang_{PIC32_CLANG_VERSION}.tar.bz2'
+    archive_file_name: Path = ROOT_WORKING_DIR / f'pic32clang_{PIC32_CLANG_VERSION}{suffix}.tar.bz2'
 
     print(f'Creating archive {archive_file_name}; this might take a while...')
 
@@ -882,10 +889,12 @@ if '__main__' == __name__:
         build_device_startup_files()
 
     if 'package' in args.steps:
+        machine = platform.machine().lower()
+
         if 'nt' == os.name:
-            pack_up_toolchain_as_zip()
+            pack_up_toolchain_as_zip('_win_' + machine)
         else:
-            pack_up_toolchain_as_tarbz2()
+            pack_up_toolchain_as_tarbz2('_linux_' + machine)
 
     # Do this extra print because otherwise the info string will be below where the command prompt
     # re-appears after this ends.
