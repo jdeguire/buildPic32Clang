@@ -395,7 +395,7 @@ def build_two_stage_llvm(args: argparse.Namespace) -> None:
         docs_cmd = ['cmake', '--build', '.', '--target', 'stage2-sphinx']
         run_subprocess(docs_cmd, 'Build LLVM Docs', build_dir)
 
-    install_cmd = ['cmake', '--build', '.', '--target', 'stage2-install-distribution']
+    install_cmd = ['cmake', '--build', '.', '--target', 'stage2-install']
     run_subprocess(install_cmd, 'Install LLVM', build_dir)
 
     # NOTE:

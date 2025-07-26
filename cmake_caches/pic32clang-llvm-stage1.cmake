@@ -12,7 +12,7 @@
 # The proper variable to check is 'MSVC', but that is not yet checked when this file is parsed.
 # The best we can do is 'WIN32' for now. This check is here because libunwind and libcxxabi
 # are not supported with MSVC.
-set(LLVM_ENABLE_PROJECTS "clang;clang-tools-extra;lld;polly" CACHE STRING "")
+set(LLVM_ENABLE_PROJECTS "clang;clang-tools-extra;lld;lldb;polly" CACHE STRING "")
 if(WIN32)
   set(LLVM_ENABLE_RUNTIMES "compiler-rt;libcxx" CACHE STRING "")
 else()

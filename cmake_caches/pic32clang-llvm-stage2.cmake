@@ -58,7 +58,7 @@ set(CLANG_CONFIG_FILE_SYSTEM_DIR "../config" CACHE STRING "")
 
 # Setup toolchain
 # These are names of subdirectories under "llvm/llvm/tools".
-set(LLVM_INSTALL_TOOLCHAIN_ONLY ON CACHE BOOL "")
+set(LLVM_INSTALL_TOOLCHAIN_ONLY OFF CACHE BOOL "")
 set(LLVM_TOOLCHAIN_TOOLS
   bugpoint
   dsymutil
@@ -89,10 +89,6 @@ set(LLVM_TOOLCHAIN_TOOLS
 set(LLVM_DISTRIBUTION_COMPONENTS
   clang
   lld
-  liblldb
-  lldb
-  lldb-dap
-  lldb-python-scripts
   LTO
   clang-apply-replacements
   clang-doc
