@@ -84,12 +84,15 @@ LLVM_REPO_URL = 'https://github.com/llvm/llvm-project.git'
 LLVM_REPO_BRANCH = 'llvmorg-21.1.0-rc3'
 LLVM_SRC_DIR = ROOT_WORKING_DIR / 'llvm'
 
-PIC32_FILE_MAKER_REPO_URL = 'https://github.com/jdeguire/pic32-device-file-maker.git'
-PIC32_FILE_MAKER_SRC_DIR = ROOT_WORKING_DIR / 'pic32-device-file-maker'
-
 CMSIS_REPO_URL = 'https://github.com/ARM-software/CMSIS_6.git'
 CMSIS_REPO_BRANCH = 'v6.2.0'
 CMSIS_SRC_DIR = ROOT_WORKING_DIR / 'cmsis'
+
+PIC32_FILE_MAKER_REPO_URL = 'https://github.com/jdeguire/pic32-device-file-maker.git'
+PIC32_FILE_MAKER_SRC_DIR = ROOT_WORKING_DIR / 'pic32-device-file-maker'
+
+PIC32CLANG_DOCS_REPO_URL = 'https://github.com/jdeguire/pic32clang_docs.git'
+PIC32CLANG_DOCS_SRC_DIR = ROOT_WORKING_DIR / 'pic32clang_docs'
 
 
 
@@ -306,12 +309,16 @@ def clone_selected_repos_from_git(args: argparse.Namespace) -> None:
         clone_from_git(LLVM_REPO_URL, args.llvm_branch, LLVM_SRC_DIR, 
                     skip_if_exists=args.skip_existing, full_clone=args.full_clone)
 
+    if args.clone_all or 'cmsis' in args.steps:
+        clone_from_git(CMSIS_REPO_URL, args.cmsis_branch, CMSIS_SRC_DIR, 
+                    skip_if_exists=args.skip_existing, full_clone=args.full_clone)
+
     if args.clone_all or 'devfiles' in args.steps:
         clone_from_git(PIC32_FILE_MAKER_REPO_URL, '', PIC32_FILE_MAKER_SRC_DIR, 
                     skip_if_exists=args.skip_existing, full_clone=args.full_clone)
 
-    if args.clone_all or 'cmsis' in args.steps:
-        clone_from_git(CMSIS_REPO_URL, args.cmsis_branch, CMSIS_SRC_DIR, 
+    if args.clone_all or args.build_docs:
+        clone_from_git(PIC32CLANG_DOCS_REPO_URL, '', PIC32CLANG_DOCS_SRC_DIR, 
                     skip_if_exists=args.skip_existing, full_clone=args.full_clone)
 
 
