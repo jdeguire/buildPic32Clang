@@ -65,7 +65,7 @@ import tkinter
 import tkinter.filedialog
 import zipfile
 
-PIC32_CLANG_VERSION = '0.2.0'
+PIC32_CLANG_VERSION = '0.2.1'
 PIC32_CLANG_PROJECT_URL = 'https://github.com/jdeguire/buildPic32Clang'
 
 
@@ -81,7 +81,7 @@ THIS_FILE_DIR = Path(os.path.dirname(os.path.realpath(__file__)))
 CMAKE_CACHE_DIR = THIS_FILE_DIR / 'cmake_caches'
 
 LLVM_REPO_URL = 'https://github.com/llvm/llvm-project.git'
-LLVM_REPO_BRANCH = 'llvmorg-21.1.0-rc1'
+LLVM_REPO_BRANCH = 'llvmorg-21.1.0-rc3'
 LLVM_SRC_DIR = ROOT_WORKING_DIR / 'llvm'
 
 PIC32_FILE_MAKER_REPO_URL = 'https://github.com/jdeguire/pic32-device-file-maker.git'
