@@ -447,7 +447,7 @@ def build_llvm_runtimes(args: argparse.Namespace, variant: TargetVariant, build_
         f'-DPIC32CLANG_PATH={toolchain_path.as_posix()}',
         f'-DLLVM_PARALLEL_COMPILE_JOBS={args.compile_jobs}',
         f'-DLLVM_PARALLEL_LINK_JOBS={args.link_jobs}',
-        f'-DLLVM_BUILD_DOCS={get_cmake_bool(args.build_docs)}',
+        f'-DLLVM_BUILD_DOCS={get_cmake_bool(build_docs)}',
         '-C', cmake_config_path.as_posix(),
         src_dir.as_posix()
     ]
@@ -486,8 +486,15 @@ def build_llvm_runtimes(args: argparse.Namespace, variant: TargetVariant, build_
                     f'Install Runtimes ({which_variant_str})',
                     build_dir)
 
-    # NOTE:
-    # Docs are installed into "INSTALL_PREFIX/cortex-m/share/doc/Runtimes".
+
+    # Docs are installed into "INSTALL_PREFIX/<series>/share/doc/Runtimes". Move them to be up with
+    # the LLVM docs in "INSTALL_PREFIX/share/doc".
+    if build_docs:
+        docs_src_dir = prefix / 'share' / 'doc' / 'Runtimes'
+        docs_dst_dir = INSTALL_PREFIX / 'share' / 'doc' / 'Runtimes'
+        
+        docs_src_dir.replace(docs_dst_dir)
+        docs_src_dir.rmdir()
 
     # Compiler-RT is built to include the arch name in the library name unless we let CMake decide
     # the directories to install them (option LLVM_ENABLE_PER_TARGET_RUNTIME_DIR). That ends up
@@ -844,7 +851,6 @@ if '__main__' == __name__:
         print('Either this script is located in a path with a space in it or your current')
         print('working directory has a space. This script currently cannot handle that.')
         exit(0)
-
 
     # The Windows Terminal (the one with tabs) supports ANSI escape codes, but the old console
     # (conhost.exe) does not unless the following weird workaround is done. This came from
