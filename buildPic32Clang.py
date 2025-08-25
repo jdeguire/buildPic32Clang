@@ -623,6 +623,26 @@ def build_device_startup_files() -> None:
         print('\n'.join(failed_devices))
 
 
+def build_pic32clang_docs() -> None:
+    '''Build the toplevel Pic32Clang docs that are in the pic32clang_docs repository and copy them
+    to the install location.
+    '''
+    if 'nt' == os.name:
+        make_cmd = 'make.bat'
+    else:
+        make_cmd = 'make'
+
+    run_subprocess([make_cmd, 'html'],
+                   'Build Pic32Clang docs',
+                   PIC32CLANG_DOCS_SRC_DIR)
+
+    print('Copying Pic32Clang docs to their proper location...', end='')
+    shutil.copytree(PIC32CLANG_DOCS_SRC_DIR / 'build' / 'html',
+                    INSTALL_PREFIX / 'docs',
+                    dirs_exist_ok=True)
+    print('Done!')
+
+
 def pack_up_toolchain_as_zip(suffix: str = '') -> None:
     '''Pack up the install files into a .zip compressed archive.
 
@@ -900,6 +920,9 @@ if '__main__' == __name__:
 
     if 'startup' in args.steps:
         build_device_startup_files()
+
+    if args.build_docs:
+        build_pic32clang_docs()
 
     if 'package' in args.steps:
         machine = platform.machine().lower()
