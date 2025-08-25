@@ -186,3 +186,14 @@ The CMake cache files located under "cmake_caches" are licensed under the modifi
 license used by Clang. Those files started out as copies of exmaple CMake files from the Clang
 source and so presumably they must comply with Clang's license. Again, I know nothing about
 licenses, so this also seems good. 
+
+## Trademarks
+This project and the similarly-named ones make references to "PIC32", "SAM", "XC32", and "MPLAB"
+products from Microchip Technology. Those names are trademarks or registered trademarks of Microchip
+Technology.
+
+These project also refer to "Arm", "ARM", "Cortex", and "CMSIS", which are all trademarks of Arm
+Limited.
+
+These projects are all independent efforts not affiliated with, endorsed, sponsored, or otherwise
+approved by Microchip Technology nor Arm Limited.
