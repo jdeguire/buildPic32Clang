@@ -172,9 +172,10 @@ internet 😉.
 There currently isn't a fully-working IDE plugin to use Clang with MPLAB X or the MPLAB VS Code
 Extensions. I do have a an MPLAB X plugin called `toolchainPic32Clang` that you are welcome to try,
 but I have not worked on it for a long time and it is basically deprecated at this point. You can
-find it at https://github.com/jdeguire/toolchainPic32Clang if you want to play around with it. My
-intent is to figure out how to integrate this with the MPLAB VS Code Extensions, which at this time
-is in early beta but is slated to replace MPLAB X.
+find it at https://github.com/jdeguire/toolchainPic32Clang if you want to play around with it. I
+do not know if the MPLAB VS Code Extensions will be extendable to support non-Microchip toolchains.
+As of this writing, the VS Code Extensions are considered early access quality and so they are still
+under very heavy development.
 
 
 ## License
