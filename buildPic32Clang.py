@@ -81,7 +81,7 @@ THIS_FILE_DIR = Path(os.path.dirname(os.path.realpath(__file__)))
 CMAKE_CACHE_DIR = THIS_FILE_DIR / 'cmake_caches'
 
 LLVM_REPO_URL = 'https://github.com/llvm/llvm-project.git'
-LLVM_REPO_BRANCH = 'llvmorg-21.1.0-rc3'
+LLVM_REPO_BRANCH = 'llvmorg-21.1.0'
 LLVM_SRC_DIR = ROOT_WORKING_DIR / 'llvm'
 
 CMSIS_REPO_URL = 'https://github.com/ARM-software/CMSIS_6.git'
