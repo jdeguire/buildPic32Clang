@@ -586,7 +586,7 @@ def build_device_startup_files() -> None:
     This does not stop if a device build fails. A summary of failed devices is printed at the end
     if there were any failed builds.
     '''
-    crt0_dir: Path = INSTALL_PREFIX / 'cortex-m' / 'proc'
+    crt0_dir: Path = INSTALL_PREFIX / 'arm' / 'proc'
     failed_devices: list[str] = []
 
     if 'nt' == os.name:
@@ -900,13 +900,13 @@ if '__main__' == __name__:
             build_two_stage_llvm(args)
 
     if 'runtimes' in args.steps:
-        build_variants: list[TargetVariant] = pic32_target_variants.create_build_variants()
+        build_variants: list[TargetVariant] = pic32_target_variants.create_arm_build_variants()
         build_docs = args.build_docs
         for variant in build_variants:
             build_llvm_runtimes(args, variant, build_docs)
             build_docs = False      # We need to build the docs only once.
 
-        pic32_target_variants.create_multilib_yaml(INSTALL_PREFIX / 'cortex-m' / 'multilib.yaml',
+        pic32_target_variants.create_multilib_yaml(INSTALL_PREFIX / 'arm' / 'multilib.yaml',
                                                     build_variants,
                                                     get_built_toolchain_abspath(),
                                                     PIC32_CLANG_PROJECT_URL,
