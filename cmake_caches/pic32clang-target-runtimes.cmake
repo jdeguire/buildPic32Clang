@@ -19,14 +19,15 @@
 # such as "mipsel-linux-gnu" or "arm-none-eabi".
 set(PIC32CLANG_TARGET_TRIPLE "" CACHE STRING "The target triple for which to build the runtimes")
 
-# This is a semicolon-delimited list of extra flags to use when building the runtime 
+# These are a semicolon-delimited lists of extra flags to use when building the runtime
 # libraries. These should include target-specific flags like "-march" and FPU flags as
 # well as optimization flags. Do not include the "-target" option because this is already
 # handled with the PIC32CLANG_TARGET_TRIPLE option. Flags and their arguments should be 
 # passed as separate entries (ie. have a semicolon between them) if there would normally
 # be a space between them. Put double quotes around entries that may have spaces in them,
 # like paths, to have them treated like a single entry.
-set(PIC32CLANG_RUNTIME_FLAGS "" CACHE STRING "Compiler flags for building the runtimes")
+set(PIC32CLANG_C_CXX_FLAGS "" CACHE STRING "Compiler flags for building the runtimes")
+set(PIC32CLANG_ASM_FLAGS "" CACHE STRING "Assembler flags for building the runtimes")
 
 # The directory path to the toolchain, presumably one that was just built for Pic32Clang,
 # that will build the runtimes. If you are doing a two-stage build (which is what the Python
@@ -58,7 +59,7 @@ endif()
 
 # Add options that will apply regardless of target.
 # TODO: We probably need to revisit these, especially if we are not using Musl anymore.
-list(APPEND PIC32CLANG_RUNTIME_FLAGS
+set(PIC32CLANG_COMMON_FLAGS
     -isystem
     ${CMAKE_INSTALL_PREFIX}/include
     -static
@@ -83,7 +84,9 @@ list(APPEND PIC32CLANG_RUNTIME_FLAGS
     -DLIBC_COPT_FLOAT_TO_STR_NO_TABLE
 )
 
-list(JOIN PIC32CLANG_RUNTIME_FLAGS " " PIC32CLANG_RUNTIME_FLAGS)
+list(JOIN PIC32CLANG_COMMON_FLAGS " " PIC32CLANG_COMMON_FLAGS)
+list(JOIN PIC32CLANG_C_CXX_FLAGS " " PIC32CLANG_C_CXX_FLAGS)
+list(JOIN PIC32CLANG_ASM_FLAGS " " PIC32CLANG_ASM_FLAGS)
 
 #
 # End Pic32Clang-specific stuff.
@@ -92,9 +95,9 @@ list(JOIN PIC32CLANG_RUNTIME_FLAGS " " PIC32CLANG_RUNTIME_FLAGS)
 # -----
 # CMake general stuff
 #
-set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} ${PIC32CLANG_RUNTIME_FLAGS}" CACHE STRING "")
-set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${PIC32CLANG_RUNTIME_FLAGS}" CACHE STRING "")
-set(CMAKE_ASM_FLAGS "${CMAKE_ASM_FLAGS} ${PIC32CLANG_RUNTIME_FLAGS}" CACHE STRING "")
+set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} ${PIC32CLANG_C_CXX_FLAGS} ${PIC32CLANG_COMMON_FLAGS}" CACHE STRING "")
+set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${PIC32CLANG_C_CXX_FLAGS} ${PIC32CLANG_COMMON_FLAGS}" CACHE STRING "")
+set(CMAKE_ASM_FLAGS "${CMAKE_ASM_FLAGS} ${PIC32CLANG_ASM_FLAGS} ${PIC32CLANG_COMMON_FLAGS}" CACHE STRING "")
 
 # Set optimization and debug options based on the value of CMAKE_BUILD_TYPE. Possible values for
 # that are "Release", "Debug", "RelWithDebInfo", and "MinSizeRel". Set the build type on the

@@ -385,7 +385,7 @@ def build_two_stage_llvm(args: argparse.Namespace) -> None:
         f'-DCMAKE_INSTALL_PREFIX={install_dir.as_posix()}',
         f'-DLLVM_PARALLEL_COMPILE_JOBS={args.compile_jobs}',
         f'-DLLVM_PARALLEL_LINK_JOBS={args.link_jobs}',
-        f'-DPACKAGE_VENDOR=pic32Clang v{PIC32_CLANG_VERSION}:',
+        f'-DPACKAGE_VENDOR=LLVM For PIC32 v{PIC32_CLANG_VERSION}:',
         f'-DBOOTSTRAP_LLVM_ENABLE_LTO={get_cmake_bool(args.enable_lto)}',
         f'-DBOOTSTRAP_CMAKE_BUILD_TYPE={args.llvm_build_type}',
         f'-DBOOTSTRAP_LLVM_PARALLEL_COMPILE_JOBS={args.compile_jobs}',
@@ -443,14 +443,16 @@ def build_llvm_runtimes(args: argparse.Namespace, variant: TargetVariant, build_
     # TODO: The CMake script for the runtimes excludes the built-in atomics support because it fails
     #       with Armv6-m. It does not support the Arm atomic access instructions. Could we enable
     #       the atomics support for all other archs and leave out v6m?
-    options_str = ';'.join(variant.options)
+    c_options_str = ';'.join(variant.options)
+    asm_options_str = ';'.join(variant.asm_options)
     gen_cmd = [
         'cmake', '-G', 'Ninja', 
         f'-DCMAKE_INSTALL_PREFIX={prefix_dir.as_posix()}',
         f'-DCMAKE_BUILD_TYPE={args.llvm_build_type}',
         f'-DPIC32CLANG_LIBDIR_SUFFIX={libdir_suffix.as_posix()}',
         f'-DPIC32CLANG_TARGET_TRIPLE={variant.triple}',
-        f'-DPIC32CLANG_RUNTIME_FLAGS={options_str}',
+        f'-DPIC32CLANG_C_CXX_FLAGS={c_options_str}',
+        f'-DPIC32CLANG_ASM_FLAGS={asm_options_str}',
         f'-DPIC32CLANG_PATH={toolchain_path.as_posix()}',
         f'-DLLVM_PARALLEL_COMPILE_JOBS={args.compile_jobs}',
         f'-DLLVM_PARALLEL_LINK_JOBS={args.link_jobs}',
@@ -500,8 +502,11 @@ def build_llvm_runtimes(args: argparse.Namespace, variant: TargetVariant, build_
         docs_src_dir = prefix / 'share' / 'doc' / 'Runtimes'
         docs_dst_dir = INSTALL_PREFIX / 'share' / 'doc' / 'Runtimes'
         
+        remake_dirs(docs_dst_dir)
         docs_src_dir.replace(docs_dst_dir)
-        docs_src_dir.rmdir()
+
+        if docs_src_dir.exists():
+            docs_src_dir.rmdir()
 
     # Compiler-RT is built to include the arch name in the library name unless we let CMake decide
     # the directories to install them (option LLVM_ENABLE_PER_TARGET_RUNTIME_DIR). That ends up

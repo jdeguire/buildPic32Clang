@@ -66,30 +66,43 @@ class TargetVariant:
     triple : str
     path : Path
     options : list[str]
+    asm_options: list[str]
 
 @dataclass(frozen=True)
 class Mips32Variant(TargetVariant):
-    def __init__(self, multilib_path: Path, arch: str, options: list[str]) -> None:
+    def __init__(self, multilib_path: Path, arch: str, options: list[str], asm_options: list[str] = []) -> None:
         # '-G0' prevents libraries from putting small globals into the small data sections. This
         # is the safest option since an application can control the size threshold with '-G<size>'.
         common_opts = [f'-march={arch}', '-G0', '-fomit-frame-pointer']
 
-        return super().__init__('mips32', 'mipsel-linux-gnu', multilib_path, common_opts + options)
+        if not asm_options:
+            asm_options = options.copy()
+
+        c_opts = common_opts + options
+        asm_opts = common_opts + asm_options
+
+        return super().__init__('mips32', 'mipsel-linux-gnu', multilib_path, c_opts, asm_opts)
 
 @dataclass(frozen=True)
 class ArmVariant(TargetVariant):
-    def __init__(self, multilib_path: Path, arch: str, options: list[str]) -> None:
+    def __init__(self, multilib_path: Path, arch: str,  options: list[str], asm_options: list[str] = []) -> None:
         # The '-mimplicit-it' flag was needed for Musl. Whatever options I used for Musl caused its
         # configure script to not pick that up automatically.
         # TODO: This may not be needed anymore since we are no longer using Musl.
         common_opts = [f'-march={arch}', '-mimplicit-it=always', '-fomit-frame-pointer']
+
+        if not asm_options:
+            asm_options = options.copy()
+
+        c_opts = common_opts + options
+        asm_opts = common_opts + asm_options
 
         # The CMake files for one of the LLVM runtime libaries (maybe Compiler-RT?) looks for the 
         # architecture in the target triple. We do not need extensions ("+foo") to be specified
         # since Clang seems to ignore them in the triple.
         triple = f'{arch.split('+')[0]}-none-eabi'
 
-        return super().__init__('arm', triple, multilib_path, common_opts + options)
+        return super().__init__('arm', triple, multilib_path, c_opts, asm_opts)
 
 
 # For ARM chips, you can find the architecture name pretty easily by looking up the CPU name 
@@ -102,6 +115,9 @@ class ArmVariant(TargetVariant):
 # or Cortex-M7. That will tell you if the FPU can support half-, single-, or double-precision math
 # and the FPU version (ex: "FPv5"). Some CPUs can optionally choose from multiple FPU implementations.
 # The TRM may also refer you to an Architecture Reference Manual for more info.
+#
+# The GCC ARM Options page can also offer some help in figuring out what CPUs can use which FPUs:
+#   https://gcc.gnu.org/onlinedocs/gcc/ARM-Options.html
 #
 # The best way I've found for seeing what you can pass to the compiler is to look in LLVM's source
 # code. The file "llvm/llvm/include/llvm/TargetParser/ARMTargetParser.def" has a list of FPU and CPU
@@ -154,10 +170,12 @@ _arm9_targets: list[TargetVariant] = [
                ['-mfpu=vfpv2', '-mfloat-abi=hard']),
     ArmVariant(Path('v5te/thumb/nofp'),
                'armv5te',
-               ['-mthumb', '-mfpu=none', '-mfloat-abi=soft']),
+               ['-mthumb', '-mfpu=none', '-mfloat-abi=soft'],
+               ['-mfpu=none', '-mfloat-abi=soft']),             # do not build asm with Thumb
     ArmVariant(Path('v5te/thumb/vfpv2'),
                'armv5te',
-               ['-mthumb', '-mfpu=vfpv2', '-mfloat-abi=hard']),
+               ['-mthumb', '-mfpu=vfpv2', '-mfloat-abi=hard'],
+               ['-mfpu=vfpv2', '-mfloat-abi=soft']),            # do not build asm with Thumb
 ]
 
 _cortexm_targets: list[TargetVariant] = [
