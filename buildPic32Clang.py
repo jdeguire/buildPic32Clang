@@ -71,7 +71,7 @@ PIC32_CLANG_PROJECT_URL = 'https://github.com/jdeguire/buildPic32Clang'
 
 # These are the build steps this script can do. The steps to be done can be given on the 
 # command line or 'all' can be used to do all of these.
-ALL_BUILD_STEPS = ['clone', 'llvm', 'runtimes', 'devfiles', 'cmsis', 'startup', 'package']
+ALL_BUILD_STEPS = ['clone', 'llvm', 'runtimes', 'devfiles', 'docs', 'cmsis', 'startup', 'package']
 
 ROOT_WORKING_DIR = Path('./pic32clang')
 BUILD_PREFIX = ROOT_WORKING_DIR / 'build'
@@ -905,14 +905,14 @@ if '__main__' == __name__:
             build_two_stage_llvm(args)
 
     if 'runtimes' in args.steps:
-        build_variants: list[TargetVariant] = pic32_target_variants.create_arm_build_variants()
+        arm_variants: list[TargetVariant] = pic32_target_variants.create_arm_build_variants()
         build_docs = args.build_docs
-        for variant in build_variants:
+        for variant in arm_variants:
             build_llvm_runtimes(args, variant, build_docs)
             build_docs = False      # We need to build the docs only once.
 
         pic32_target_variants.create_multilib_yaml(INSTALL_PREFIX / 'arm' / 'multilib.yaml',
-                                                    build_variants,
+                                                    arm_variants,
                                                     get_built_toolchain_abspath(),
                                                     PIC32_CLANG_PROJECT_URL,
                                                     PIC32_CLANG_VERSION)
@@ -926,7 +926,7 @@ if '__main__' == __name__:
     if 'startup' in args.steps:
         build_device_startup_files()
 
-    if args.build_docs:
+    if args.build_docs or 'docs' in args.steps:
         build_pic32clang_docs()
 
     if 'package' in args.steps:
