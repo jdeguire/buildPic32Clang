@@ -89,9 +89,11 @@ CMSIS_REPO_BRANCH = 'v6.2.0'
 CMSIS_SRC_DIR = ROOT_WORKING_DIR / 'cmsis'
 
 PIC32_FILE_MAKER_REPO_URL = 'https://github.com/jdeguire/pic32-device-file-maker.git'
+PIC32_FILE_MAKER_REPO_BRANCH = 'v0.2.1'
 PIC32_FILE_MAKER_SRC_DIR = ROOT_WORKING_DIR / 'pic32-device-file-maker'
 
 PIC32CLANG_DOCS_REPO_URL = 'https://github.com/jdeguire/pic32clang_docs.git'
+PIC32CLANG_DOCS_REPO_BRANCH = 'v0.1.0'
 PIC32CLANG_DOCS_SRC_DIR = ROOT_WORKING_DIR / 'pic32clang_docs'
 
 
@@ -314,11 +316,11 @@ def clone_selected_repos_from_git(args: argparse.Namespace) -> None:
                     skip_if_exists=args.skip_existing, full_clone=args.full_clone)
 
     if args.clone_all or 'devfiles' in args.steps:
-        clone_from_git(PIC32_FILE_MAKER_REPO_URL, '', PIC32_FILE_MAKER_SRC_DIR, 
+        clone_from_git(PIC32_FILE_MAKER_REPO_URL, args.devfiles_branch, PIC32_FILE_MAKER_SRC_DIR, 
                     skip_if_exists=args.skip_existing, full_clone=args.full_clone)
 
     if args.clone_all or args.build_docs:
-        clone_from_git(PIC32CLANG_DOCS_REPO_URL, '', PIC32CLANG_DOCS_SRC_DIR, 
+        clone_from_git(PIC32CLANG_DOCS_REPO_URL, args.docs_branch, PIC32CLANG_DOCS_SRC_DIR, 
                     skip_if_exists=args.skip_existing, full_clone=args.full_clone)
 
 
@@ -741,6 +743,14 @@ def get_command_line_arguments() -> argparse.Namespace:
                         default=CMSIS_REPO_BRANCH,
                         metavar='REF',
                         help='select CMSIS git branch to clone from (use "main" to get latest)')
+    parser.add_argument('--devfiles-branch',
+                        default=PIC32_FILE_MAKER_REPO_BRANCH,
+                        metavar='REF',
+                        help='select PIC32 device files git branch to clone from (use "main" to get latest)')
+    parser.add_argument('--docs-branch',
+                        default=PIC32CLANG_DOCS_REPO_BRANCH,
+                        metavar='REF',
+                        help='select LLVM for PIC32 docs git branch to clone from (use "main" to get latest)')
     parser.add_argument('--clone-all',
                         action='store_true',
                         help='clone every git repo even if not needed')

@@ -119,6 +119,14 @@ Here are the command-line arguments you can supply to control how the script run
     Set the CMSIS git branch or tag to clone from or use "main" to get the latest sources. The
     default will be the most recent released version when the script was last updated. You can use
     the built-in help (`--help`) to see the default.
+- `--devfiles-branch REF`  
+    Set the device files maker git branch or tag to clone from or use "main" to get the latest sources.
+    The default will be the most recent released version when the script was last updated. You can use
+    the built-in help (`--help`) to see the default.
+- `--docs-branch REF`  
+    Set the LLVM for PIC32 docs git branch or tag to clone from or use "main" to get the latest sources.
+    The default will be the most recent released version when the script was last updated. You can use
+    the built-in help (`--help`) to see the default.
 - `--clone-all`  
     Clone every git repo even when not all of them are needed to complete the steps provided with
     `--steps`. Use `--steps clone --clone-all` to create an archive of the sources for later use.
