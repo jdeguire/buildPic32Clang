@@ -53,6 +53,11 @@ set(CLANG_DEFAULT_CXX_STDLIB "libc++" CACHE STRING "")
 set(CLANG_DEFAULT_RTLIB "compiler-rt" CACHE STRING "")
 set(CLANG_DEFAULT_UNWINDLIB "libunwind" CACHE STRING "")
 set(CLANG_DEFAULT_OBJCOPY "llvm-objcopy" CACHE STRING "")
+# TODO: There is currently a PR to add both a "--cstdlib" option and a CLANG_DEFAULT_C_STDLIB CMake
+#       variable at https://github.com/llvm/llvm-project/pull/185870. If this goes through, we will
+#       want to add the CMake option here and the Clang option to our config files. However, it looks
+#       like this PR was merged that adds only the Clang option: https://github.com/llvm/llvm-project/pull/183254#issuecomment-3961949583.
+#       That comment specifically asks to NOT have a CMake option.
 
 # Tell Clang to look in ../config relative to its executable for our device
 # configuration files. This can be overridden using the --config-system-dir=

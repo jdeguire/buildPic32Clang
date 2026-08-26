@@ -177,6 +177,7 @@ set(COMPILER_RT_BUILD_CRT ON CACHE BOOL "")
 #set(COMPILER_RT_BUILD_LIBFUZZER ON CACHE BOOL "")
 #set(COMPILER_RT_BUILD_PROFILE ON CACHE BOOL "")
 #set(COMPILER_RT_BUILD_MEMPROF ON CACHE BOOL "")
+# TODO: There might now be support for a baremetal profiler. See what supporting that would enatil.
 set(COMPILER_RT_BUILD_SANITIZERS OFF CACHE BOOL "")
 set(COMPILER_RT_BUILD_XRAY OFF CACHE BOOL "")
 set(COMPILER_RT_BUILD_LIBFUZZER OFF CACHE BOOL "")
@@ -207,6 +208,8 @@ set(LIBUNWIND_ENABLE_ASSERTIONS OFF CACHE BOOL "")
 # -----
 # LLVM-libc
 #
+# This has a LOT of config options, here is a list: https://libc.llvm.org/configure.html
+#
 # TODO: Do we want to include Scudo? It's a more secure memory allocator. If so, there are a few
 #       Compiler-RT options above related to Scudo. This might not be supported on baremetal.
 set(LLVM_LIBC_FULL_BUILD ON CACHE BOOL "")
@@ -217,27 +220,36 @@ set(LIBC_TARGET_TRIPLE ${MCHPCLANG_TARGET_TRIPLE} CACHE STRING "")
 # functions.
 set(LLVM_LIBC_ALL_HEADERS ON CACHE BOOL "")
 
+# LLVM-libc currently uses 64-bit time on all platforms except for 32-bit Arm. This is to maintain
+# compatibility with glibc, but reading online suggests that even 32-bit Arm is moving to 64-bit
+# time. As of April 2026, there is a proposal to remove 32-bit time from LLVM-libc. Set this to
+# ensure 64-bit time is used.
+set(LIBC_CONF_TIME_64BIT ON CACHE BOOL "")
+
 # Printf options:
 # Some of these are disabled by default for baremetal targets. Explicity put the options here
 # so we can tune them how we want.
 # See "llvm/libc/config/baremetal/config.json" for the defaults. 
 # See "llvm/libc/src/__support/float_to_string.h" and "llvm/libc/docs/dev/printf_behavior.rst"
 # for additional explanations for these. 
-set(LIBC_CONF_PRINTF_DISABLE_INDEX_MODE ON CACHE STRING "")
-set(LIBC_CONF_PRINTF_DISABLE_STRERROR ON CACHE STRING "")
-set(LIBC_CONF_PRINTF_DISABLE_WRITE_INT ON CACHE STRING "")
-set(LIBC_CONF_PRINTF_DISABLE_FIXED_POINT OFF CACHE STRING "")
-set(LIBC_CONF_PRINTF_DISABLE_FLOAT OFF CACHE STRING "")
-set(LIBC_CONF_PRINTF_FLOAT_TO_STR_NO_SPECIALIZE_LD ON CACHE STRING "")
-set(LIBC_CONF_PRINTF_FLOAT_TO_STR_USE_DYADIC_FLOAT ON CACHE STRING "")
+set(LIBC_CONF_PRINTF_DISABLE_INDEX_MODE ON CACHE BOOL "")
+set(LIBC_CONF_PRINTF_DISABLE_STRERROR ON CACHE BOOL "")
+set(LIBC_CONF_PRINTF_DISABLE_WRITE_INT ON CACHE BOOL "")
+set(LIBC_CONF_PRINTF_DISABLE_FIXED_POINT OFF CACHE BOOL "")
+set(LIBC_CONF_PRINTF_DISABLE_FLOAT OFF CACHE BOOL "")
+set(LIBC_CONF_PRINTF_FLOAT_TO_STR_NO_SPECIALIZE_LD ON CACHE BOOL "")
+set(LIBC_CONF_PRINTF_FLOAT_TO_STR_USE_DYADIC_FLOAT ON CACHE BOOL "")
 # Enabling this FLOAT320 option will reduce binary size by 9kB but make floating point conversions
 # take about twice as long (~350us vs ~180us in a very basic example). This assumes that
 # LIBC_COPT_FLOAT_TO_STR_NO_TABLE is defined in the runtime flags above.
-set(LIBC_CONF_PRINTF_FLOAT_TO_STR_USE_FLOAT320 OFF CACHE STRING "")
-set(LIBC_CONF_PRINTF_FLOAT_TO_STR_USE_MEGA_LONG_DOUBLE_TABLE OFF CACHE STRING "")
+set(LIBC_CONF_PRINTF_FLOAT_TO_STR_USE_FLOAT320 OFF CACHE BOOL "")
+set(LIBC_CONF_PRINTF_FLOAT_TO_STR_USE_MEGA_LONG_DOUBLE_TABLE OFF CACHE BOOL "")
+# This enables a modulat printf so that floating-point support is linked in only if needed.
+# Support for this was initially added in March 2026.
+set(LIBC_CONF_PRINTF_MODULAR ON CACHE BOOL "")
 
-set(LIBC_CONF_SCANF_DISABLE_FLOAT OFF CACHE STRING "")
-set(LIBC_CONF_SCANF_DISABLE_INDEX_MODE ON CACHE STRING "")
+set(LIBC_CONF_SCANF_DISABLE_FLOAT OFF CACHE BOOL "")
+set(LIBC_CONF_SCANF_DISABLE_INDEX_MODE ON CACHE BOOL "")
 
 # -----
 # Libc++
@@ -273,10 +285,13 @@ set(LIBCXX_ENABLE_THREADS OFF CACHE BOOL "")
 set(LIBCXX_HAS_PTHREAD_API OFF CACHE BOOL "")
 # We need to disable wide character support because LLVM-libc has very few wchar functions
 # implemented at this time. We can revisit this in the future.
+# TODO: LLVM-libc's wchar support has since improved a bunch. Can we turn this back on?
 set(LIBCXX_ENABLE_WIDE_CHARACTERS OFF CACHE BOOL "")
 # LLVM-libc recently included locale stuff in the baremetal build, but libc++ expects to be able to
 # use C file IO functions, which we do not yet have on baremetal libc. This ends up disabling a lot
 # of the stream interface, but we avoid those on embedded anyway.
+# TODO: Can we turn this back on now that LLVM-libc baremetal has improvided file IO support and 
+#       since we turn on all declarations anyway?
 set(LIBCXX_ENABLE_LOCALIZATION OFF CACHE BOOL "")
 # TODO: Turn this off for now but revisit it in the future. I'm not sure what it does.
 #       Really, anything in embedded would be a terminal, but maybe we want this off if

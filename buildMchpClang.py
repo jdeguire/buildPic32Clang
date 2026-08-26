@@ -57,7 +57,7 @@ import tarfile
 import time
 import zipfile
 
-MCHP_CLANG_VERSION = '0.7.0'
+MCHP_CLANG_VERSION = '0.8.0'
 MCHP_CLANG_PROJECT_URL = 'https://github.com/jdeguire/buildMchpClang'
 
 
@@ -74,7 +74,7 @@ CMAKE_CACHE_DIR = THIS_FILE_DIR / 'cmake_caches'
 TESTS_DIR = THIS_FILE_DIR / 'test'
 
 LLVM_REPO_URL = 'https://github.com/llvm/llvm-project.git'
-LLVM_REPO_BRANCH = 'llvmorg-22.1.0'
+LLVM_REPO_BRANCH = 'llvmorg-23.1.0'
 LLVM_SRC_DIR = ROOT_WORKING_DIR / 'llvm'
 
 CMSIS_REPO_URL = 'https://github.com/ARM-software/CMSIS_6.git'
@@ -82,7 +82,7 @@ CMSIS_REPO_BRANCH = 'v6.3.0'
 CMSIS_SRC_DIR = ROOT_WORKING_DIR / 'cmsis'
 
 ATDF_FILE_MAKER_REPO_URL = 'https://github.com/jdeguire/atdf-device-file-maker.git'
-ATDF_FILE_MAKER_REPO_BRANCH = 'v0.6.3'
+ATDF_FILE_MAKER_REPO_BRANCH = 'v0.7.1'
 ATDF_FILE_MAKER_SRC_DIR = ROOT_WORKING_DIR / 'atdf-device-file-maker'
 
 MCHPCLANG_DOCS_REPO_URL = 'https://github.com/jdeguire/mchpclang_docs.git'
@@ -1136,5 +1136,5 @@ if '__main__' == __name__:
             package_targz_binary_distribution('_linux_' + platform.machine().lower())
 
     # Do this extra print because otherwise the info string will be below where the command prompt
-    # re-appears after this ends.
-    print('\n')
+    # re-appears after this ends. Might as well print a done message while we're at it.
+    print('\nDONE!\n')
