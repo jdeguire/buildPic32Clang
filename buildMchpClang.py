@@ -57,7 +57,7 @@ import tarfile
 import time
 import zipfile
 
-MCHP_CLANG_VERSION = '0.8.0'
+MCHP_CLANG_VERSION = '0.8.1'
 MCHP_CLANG_PROJECT_URL = 'https://github.com/jdeguire/buildMchpClang'
 
 
@@ -82,7 +82,7 @@ CMSIS_REPO_BRANCH = 'v6.3.0'
 CMSIS_SRC_DIR = ROOT_WORKING_DIR / 'cmsis'
 
 ATDF_FILE_MAKER_REPO_URL = 'https://github.com/jdeguire/atdf-device-file-maker.git'
-ATDF_FILE_MAKER_REPO_BRANCH = 'v0.7.1'
+ATDF_FILE_MAKER_REPO_BRANCH = 'v0.7.2'
 ATDF_FILE_MAKER_SRC_DIR = ROOT_WORKING_DIR / 'atdf-device-file-maker'
 
 MCHPCLANG_DOCS_REPO_URL = 'https://github.com/jdeguire/mchpclang_docs.git'
